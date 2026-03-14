@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
+import path from 'path'
+
+const AUTH_FILE = path.join(__dirname, 'tests/e2e/.auth/user.json')
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -16,12 +19,15 @@ export default defineConfig({
     { name: 'setup', testMatch: '**/global.setup.ts' },
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: AUTH_FILE,
+      },
       dependencies: ['setup'],
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: process.env.CI ? 'pnpm start' : 'pnpm dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

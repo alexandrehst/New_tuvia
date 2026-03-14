@@ -5,7 +5,7 @@ test.describe('Autenticação', () => {
     await page.goto('/login')
     await page.getByLabel('Email').fill(process.env.TEST_USER_EMAIL ?? 'admin@demo.com')
     await page.getByLabel('Senha').fill(process.env.TEST_USER_PASSWORD ?? 'demo1234')
-    await page.getByRole('button', { name: 'Entrar' }).click()
+    await page.getByRole('button', { name: /avançar|entrar/i }).click()
 
     await expect(page).toHaveURL('/planos')
     await expect(page.getByRole('heading', { name: /planos/i })).toBeVisible()
@@ -15,7 +15,7 @@ test.describe('Autenticação', () => {
     await page.goto('/login')
     await page.getByLabel('Email').fill('admin@demo.com')
     await page.getByLabel('Senha').fill('senha-errada')
-    await page.getByRole('button', { name: 'Entrar' }).click()
+    await page.getByRole('button', { name: /avançar|entrar/i }).click()
 
     await expect(page.getByRole('alert')).toBeVisible()
     await expect(page).toHaveURL('/login')
