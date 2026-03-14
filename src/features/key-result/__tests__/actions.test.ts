@@ -151,6 +151,58 @@ describe('updateKeyResultValor', () => {
 
     expect(result.ok).toBe(true)
   })
+
+  it('usa new Date() quando plano não tem datas definidas', async () => {
+    const kr = makeKr({
+      objetivo: {
+        id: validCuid2,
+        plano: { dataInicio: null, dataFim: null },
+        resultadosChave: [{ id: validCuid, progresso: 0, peso: 1 }],
+      },
+    })
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue(kr)
+    mockPrisma.resultadoChave.update.mockResolvedValue({})
+    mockPrisma.historicoValores.create.mockResolvedValue({})
+    mockPrisma.objetivo.update.mockResolvedValue({})
+    mockPrisma.objetivoResponsavel.findMany.mockResolvedValue([])
+
+    const result = await updateKeyResultValor({ krId: validCuid, valor: 50 })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('recalcula progresso considerando outros KRs do objetivo', async () => {
+    const otherKrId = 'clh0000000000000000000000a'
+    const kr = makeKr({
+      objetivo: {
+        id: validCuid2,
+        plano: { dataInicio: new Date('2025-01-01'), dataFim: new Date('2025-12-31') },
+        resultadosChave: [
+          { id: validCuid, progresso: 0, peso: 1 },
+          { id: otherKrId, progresso: 80, peso: 1 },
+        ],
+      },
+    })
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue(kr)
+    mockPrisma.resultadoChave.update.mockResolvedValue({})
+    mockPrisma.historicoValores.create.mockResolvedValue({})
+    mockPrisma.objetivo.update.mockResolvedValue({})
+    mockPrisma.objetivoResponsavel.findMany.mockResolvedValue([])
+
+    const result = await updateKeyResultValor({ krId: validCuid, valor: 50 })
+
+    // (50 + 80) / 2 = 65
+    expect(mockPrisma.objetivo.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { progresso: 65 } })
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('lança erro de validação para krId inválido', async () => {
+    await expect(
+      updateKeyResultValor({ krId: 'invalido', valor: 50 })
+    ).rejects.toThrow()
+  })
 })
 
 describe('createKeyResult', () => {
@@ -219,5 +271,11 @@ describe('createKeyResult', () => {
     const result = await createKeyResult(validInput)
 
     expect(result).toEqual(fakeKr)
+  })
+
+  it('lança erro de validação para dados inválidos', async () => {
+    await expect(
+      createKeyResult({ ...validInput, descricao: 'AB' })
+    ).rejects.toThrow()
   })
 })

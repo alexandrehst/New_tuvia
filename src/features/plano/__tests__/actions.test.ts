@@ -169,4 +169,98 @@ describe('createPlanoCorporativo', () => {
       createPlanoCorporativo('cliente-1', { ...validInput, empresa: 'T' })
     ).rejects.toThrow()
   })
+
+  it('usa lista vazia quando OpenAI retorna JSON sem campo Objectives', async () => {
+    mockPrisma.planoEstrategico.create.mockResolvedValue({ id: 'estrategico-1' })
+    mockPrisma.plano.create.mockResolvedValue({ id: 'plano-1' })
+    mockPrisma.objetivo.create.mockResolvedValue({ id: 'obj-1' })
+    mockPrisma.resultadoChave.create.mockResolvedValue({ id: 'kr-1' })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    mockOpenAI.chat.completions.create
+      .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ outro: 'campo' })))
+      .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ KeyResults: [] })))
+
+    const result = await createPlanoCorporativo('cliente-1', validInput)
+
+    expect(result).toEqual({ planoId: 'plano-1' })
+    // No objectives to create when Objectives field is absent
+    expect(mockPrisma.objetivo.create).not.toHaveBeenCalled()
+  })
+
+  it('usa fallback de objetivos quando content da OpenAI é null', async () => {
+    mockPrisma.planoEstrategico.create.mockResolvedValue({ id: 'estrategico-1' })
+    mockPrisma.plano.create.mockResolvedValue({ id: 'plano-1' })
+    mockPrisma.objetivo.create.mockResolvedValue({ id: 'obj-1' })
+    mockPrisma.resultadoChave.create.mockResolvedValue({ id: 'kr-1' })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    mockOpenAI.chat.completions.create
+      .mockResolvedValueOnce({ choices: [{ message: { content: null } }] })
+      .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ KeyResults: [] })))
+
+    const result = await createPlanoCorporativo('cliente-1', validInput)
+
+    // JSON.parse('{}') gives {}, Objectives ?? [] gives [], so no objectives created
+    expect(result).toEqual({ planoId: 'plano-1' })
+  })
+
+  it('usa KRs vazios quando content da OpenAI é null para KRs', async () => {
+    mockPrisma.planoEstrategico.create.mockResolvedValue({ id: 'estrategico-1' })
+    mockPrisma.plano.create.mockResolvedValue({ id: 'plano-1' })
+    mockPrisma.objetivo.create.mockResolvedValue({ id: 'obj-1' })
+    mockPrisma.resultadoChave.create.mockResolvedValue({ id: 'kr-1' })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    mockOpenAI.chat.completions.create
+      .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ Objectives: [{ Title: 'Obj', Description: 'Desc' }] })))
+      .mockResolvedValue({ choices: [{ message: { content: null } }] })
+
+    const result = await createPlanoCorporativo('cliente-1', validInput)
+
+    expect(result).toEqual({ planoId: 'plano-1' })
+    expect(mockPrisma.resultadoChave.create).not.toHaveBeenCalled()
+  })
+
+  it('usa KRs vazios quando OpenAI retorna JSON sem campo KeyResults', async () => {
+    mockPrisma.planoEstrategico.create.mockResolvedValue({ id: 'estrategico-1' })
+    mockPrisma.plano.create.mockResolvedValue({ id: 'plano-1' })
+    mockPrisma.objetivo.create.mockResolvedValue({ id: 'obj-1' })
+    mockPrisma.resultadoChave.create.mockResolvedValue({ id: 'kr-1' })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    mockOpenAI.chat.completions.create
+      .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ Objectives: [{ Title: 'Obj', Description: 'Desc' }] })))
+      .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ outro: 'campo' })))
+
+    const result = await createPlanoCorporativo('cliente-1', validInput)
+
+    expect(result).toEqual({ planoId: 'plano-1' })
+    expect(mockPrisma.resultadoChave.create).not.toHaveBeenCalled()
+  })
+
+  it('usa valores padrão quando KRs do OpenAI omitem ValorInicial e ValorAlvo', async () => {
+    mockPrisma.planoEstrategico.create.mockResolvedValue({ id: 'estrategico-1' })
+    mockPrisma.plano.create.mockResolvedValue({ id: 'plano-1' })
+    mockPrisma.objetivo.create.mockResolvedValue({ id: 'obj-1' })
+    mockPrisma.resultadoChave.create.mockResolvedValue({ id: 'kr-1' })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    mockOpenAI.chat.completions.create
+      .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({
+        Objectives: [{ Title: 'Obj', Description: 'Desc' }],
+      })))
+      .mockResolvedValue(makeOpenAIResponse(JSON.stringify({
+        KeyResults: [{ Description: 'KR sem valores', Unidade: '%' }],
+      })))
+
+    const result = await createPlanoCorporativo('cliente-1', validInput)
+
+    expect(result).toEqual({ planoId: 'plano-1' })
+    expect(mockPrisma.resultadoChave.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ valorInicial: 0, valorAlvo: 100 }),
+      })
+    )
+  })
 })
