@@ -1,0 +1,337 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum TipoUser {
+  admin
+  membro
+}
+
+enum StatusUser {
+  ativo
+  inativo
+  pendente
+  expirado
+}
+
+enum TipoPlano {
+  corporativo
+  apoio
+}
+
+enum StatusPlano {
+  edicao
+  publicado
+  arquivado
+}
+
+enum FrequenciaAtualizacao {
+  semanal
+  quinzenal
+  mensal
+}
+
+enum PapelPlano {
+  owner
+  editor
+  viewer
+}
+
+enum TipoMetrica {
+  aumentar
+  reduzir
+  simNao
+}
+
+enum StatusResultadoChave {
+  no_prazo
+  em_atraso
+  em_risco
+  risco_alto
+}
+
+enum StatusDominio {
+  ativo
+  inativo
+}
+
+// ─────────────────────────────────────────────
+// Cliente (tenant raiz)
+// ─────────────────────────────────────────────
+
+model Cliente {
+  id                    String   @id @default(cuid())
+  nome                  String
+  stripeCustomerId      String?
+  subscriptionId        String?
+  subscriptionItemId    String?
+  quantidadeUsuarios    Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  usuarios              User[]
+  departamentos         Departamento[]
+  planosEstrategicos    PlanoEstrategico[]
+  planos                Plano[]
+  dominios              Dominio[]
+}
+
+// ─────────────────────────────────────────────
+// User
+// ─────────────────────────────────────────────
+
+model User {
+  id                        String     @id @default(cuid())
+  clienteId                 String
+  email                     String     @unique
+  nome                      String
+  foto                      String?
+  tipoUser                  TipoUser   @default(membro)
+  statusUser                StatusUser @default(pendente)
+  atualizacaoEmailPlano     Boolean    @default(true)
+  atualizacaoEmailObjetivo  Boolean    @default(true)
+  atualizacaoEmailResultado Boolean    @default(true)
+  temConvite                Boolean    @default(false)
+  createdAt                 DateTime   @default(now())
+  updatedAt                 DateTime   @updatedAt
+
+  cliente                   Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  planosUsuario             PlanoUsuario[]
+  objetivosResponsavel      ObjetivoResponsavel[]
+  departamentosResponsavel  Departamento[]
+
+  @@index([clienteId])
+}
+
+// ─────────────────────────────────────────────
+// Departamento
+// ─────────────────────────────────────────────
+
+model Departamento {
+  id            String   @id @default(cuid())
+  clienteId     String
+  responsavelId String?
+  nome          String
+  descricao     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  responsavel   User?    @relation(fields: [responsavelId], references: [id], onDelete: SetNull)
+  planos        Plano[]
+
+  @@index([clienteId])
+}
+
+// ─────────────────────────────────────────────
+// PlanoEstrategico (auxiliar — inputs do wizard)
+// Armazena SWOT + missão/visão/valores usados para
+// gerar o Plano via IA. Vinculado ao Plano após criação.
+// ─────────────────────────────────────────────
+
+model PlanoEstrategico {
+  id               String   @id @default(cuid())
+  clienteId        String
+  empresa          String
+  ramo             String
+  descricaoNegocio String?
+  missao           String?
+  visao            String?
+  valores          String[]
+  oportunidades    String[]
+  ameacas          String[]
+  forcas           String[]
+  fraquezas        String[]
+  comecar          String[]
+  manter           String[]
+  parar            String[]
+  ondeEstamos      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  cliente          Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  plano            Plano?   // Plano gerado a partir deste PE
+
+  @@index([clienteId])
+}
+
+// ─────────────────────────────────────────────
+// Plano
+// ─────────────────────────────────────────────
+
+model Plano {
+  id                   String                @id @default(cuid())
+  clienteId            String
+  planoPaiId           String?
+  planoEstrategicoId   String?               @unique
+  departamentoId       String?
+  titulo               String
+  tipo                 TipoPlano             @default(corporativo)
+  status               StatusPlano           @default(edicao)
+  dataInicio           DateTime?
+  dataFim              DateTime?
+  frequenciaAtualizacao FrequenciaAtualizacao @default(mensal)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  cliente              Cliente               @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  planoPai             Plano?                @relation("PlanoHierarquia", fields: [planoPaiId], references: [id], onDelete: SetNull)
+  planosFilhos         Plano[]               @relation("PlanoHierarquia")
+  planoEstrategico     PlanoEstrategico?     @relation(fields: [planoEstrategicoId], references: [id], onDelete: SetNull)
+  departamento         Departamento?         @relation(fields: [departamentoId], references: [id], onDelete: SetNull)
+  objetivos            Objetivo[]
+  usuarios             PlanoUsuario[]
+
+  @@index([clienteId])
+  @@index([planoPaiId])
+}
+
+// ─────────────────────────────────────────────
+// PlanoUsuario (N:N Plano ↔ User com papel)
+// ─────────────────────────────────────────────
+
+model PlanoUsuario {
+  id        String     @id @default(cuid())
+  planoId   String
+  userId    String
+  papel     PapelPlano @default(viewer)
+  createdAt DateTime   @default(now())
+
+  plano     Plano      @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([planoId, userId])
+  @@index([planoId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// Objetivo
+// ─────────────────────────────────────────────
+
+model Objetivo {
+  id                  String   @id @default(cuid())
+  planoId             String
+  objetivoVinculadoId String?  // Link para objetivo de nível superior
+  titulo              String
+  descricao           String?
+  numero              Int
+  progresso           Float    @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  plano               Plano    @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  objetivoVinculado   Objetivo? @relation("ObjetivoVinculo", fields: [objetivoVinculadoId], references: [id], onDelete: SetNull)
+  objetivosVinculados Objetivo[] @relation("ObjetivoVinculo")
+  resultadosChave     ResultadoChave[]
+  responsaveis        ObjetivoResponsavel[]
+
+  @@index([planoId])
+}
+
+// ─────────────────────────────────────────────
+// ObjetivoResponsavel (N:N Objetivo ↔ User)
+// ─────────────────────────────────────────────
+
+model ObjetivoResponsavel {
+  id         String   @id @default(cuid())
+  objetivoId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  objetivo   Objetivo @relation(fields: [objetivoId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([objetivoId, userId])
+  @@index([objetivoId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// ResultadoChave
+// ─────────────────────────────────────────────
+
+model ResultadoChave {
+  id                 String               @id @default(cuid())
+  objetivoId         String
+  descricao          String
+  tipoMetrica        TipoMetrica          @default(aumentar)
+  valorInicial       Float                @default(0)
+  valorAlvo          Float
+  valorAtual         Float                @default(0)
+  unidade            String?
+  peso               Float                @default(1)
+  progresso          Float                @default(0)
+  progressoPonderado Float                @default(0)
+  status             StatusResultadoChave @default(no_prazo)
+  faltaAtualizar     Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  objetivo           Objetivo             @relation(fields: [objetivoId], references: [id], onDelete: Cascade)
+  historico          HistoricoValores[]
+  linhaTendencia     LinhaTendencia[]
+
+  @@index([objetivoId])
+}
+
+// ─────────────────────────────────────────────
+// HistoricoValores (série temporal de atualizações)
+// ─────────────────────────────────────────────
+
+model HistoricoValores {
+  id               String         @id @default(cuid())
+  resultadoChaveId String
+  valor            Float
+  comentario       String?
+  dataRegistro     DateTime       @default(now())
+
+  resultadoChave   ResultadoChave @relation(fields: [resultadoChaveId], references: [id], onDelete: Cascade)
+
+  @@index([resultadoChaveId])
+  @@index([dataRegistro])
+}
+
+// ─────────────────────────────────────────────
+// LinhaTendencia (baseline linear gerada na criação do KR)
+// ─────────────────────────────────────────────
+
+model LinhaTendencia {
+  id               String         @id @default(cuid())
+  resultadoChaveId String
+  data             DateTime
+  valor            Float
+
+  resultadoChave   ResultadoChave @relation(fields: [resultadoChaveId], references: [id], onDelete: Cascade)
+
+  @@index([resultadoChaveId])
+}
+
+// ─────────────────────────────────────────────
+// Dominio (multi-tenant por domínio de email)
+// ─────────────────────────────────────────────
+
+model Dominio {
+  id         String        @id @default(cuid())
+  clienteId  String
+  dominio    String        @unique
+  status     StatusDominio @default(ativo)
+  createdAt  DateTime      @default(now())
+
+  cliente    Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId])
+}
