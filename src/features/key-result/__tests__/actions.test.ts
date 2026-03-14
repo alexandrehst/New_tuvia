@@ -35,7 +35,7 @@ vi.mock('@/lib/brevo', () => ({
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/brevo'
 
-const mockPrisma = prisma as Record<string, Record<string, ReturnType<typeof vi.fn>>>
+const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 
 beforeEach(() => vi.clearAllMocks())
 

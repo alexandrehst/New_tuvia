@@ -18,7 +18,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { prisma } from '@/lib/prisma'
 
-const mockPrisma = prisma as {
+const mockPrisma = prisma as unknown as {
   objetivo: { create: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> }
   objetivoResponsavel: { createMany: ReturnType<typeof vi.fn> }
 }

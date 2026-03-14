@@ -25,8 +25,8 @@ vi.mock('@/lib/openai', () => ({
 import { prisma } from '@/lib/prisma'
 import { openai } from '@/lib/openai'
 
-const mockPrisma = prisma as Record<string, Record<string, ReturnType<typeof vi.fn>>>
-const mockOpenAI = openai as { chat: { completions: { create: ReturnType<typeof vi.fn> } } }
+const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
+const mockOpenAI = openai as unknown as { chat: { completions: { create: ReturnType<typeof vi.fn> } } }
 
 const validInput = {
   empresa: 'TechCorp',
@@ -37,8 +37,12 @@ const validInput = {
   valores: ['Inovação', 'Respeito'],
   oportunidades: ['Mercado em crescimento'],
   ameacas: ['Concorrência forte'],
+  forcas: [] as string[],
+  fraquezas: [] as string[],
   ondeEstamos: 'Empresa com 50 colaboradores e crescimento de 20% ao ano',
   comecar: ['Implementar OKRs'],
+  manter: [] as string[],
+  parar: [] as string[],
   dataInicio: new Date('2025-01-01'),
   dataFim: new Date('2025-12-31'),
 }

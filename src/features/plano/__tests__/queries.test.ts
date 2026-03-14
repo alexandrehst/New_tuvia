@@ -12,7 +12,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { prisma } from '@/lib/prisma'
 
-const mockPrisma = prisma as {
+const mockPrisma = prisma as unknown as {
   plano: {
     findMany: ReturnType<typeof vi.fn>
     findUnique: ReturnType<typeof vi.fn>
