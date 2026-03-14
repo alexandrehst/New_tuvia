@@ -81,7 +81,7 @@ export default async function PlanoDetailPage({ params }: { params: Promise<{ id
       {/* OKR Tree */}
       {objetivosCount === 0 ? (
         <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-          <p className="text-sm">Nenhum objetivo ainda. Clique em "Nova OKR" para começar.</p>
+          <p className="text-sm">Nenhum objetivo ainda. Clique em &quot;Nova OKR&quot; para começar.</p>
         </div>
       ) : (
         <PlanoTree planos={[plano]} initialExpanded={id} />

@@ -58,7 +58,7 @@ export function PlanoTree({ planos, initialExpanded }: PlanoTreeProps) {
   const togglePlano = (id: string) => {
     setExpandedPlanos((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }
@@ -66,7 +66,7 @@ export function PlanoTree({ planos, initialExpanded }: PlanoTreeProps) {
   const toggleObjetivo = (id: string) => {
     setExpandedObjetivos((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }
@@ -92,7 +92,7 @@ function renderPlano(
 
   return (
     <div key={plano.id} className="space-y-3">
-      {objetivos.map((objetivo) =>
+      {isExpanded && objetivos.map((objetivo) =>
         renderObjetivo(objetivo, expandedObjetivos, toggleObjetivo, openKR, setOpenKR)
       )}
     </div>

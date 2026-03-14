@@ -467,8 +467,6 @@ export function CriadorWizard({ clienteId }: { clienteId: string }) {
 
   // ── Main wizard ────────────────────────────────────────────────────────────
 
-  const allDone = active >= STEPS.length
-
   return (
     <div className="max-w-xl mx-auto">
 
