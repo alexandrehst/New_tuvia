@@ -10,7 +10,15 @@
       "Bash(npm run:*)",
       "Bash(export:*)",
       "Bash(curl:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(pnpm:*)",
+      "Bash(git:*)",
+      "Bash(for feature:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/alexandretorres/Documents/okr/src/features/**)",
+      "Bash(done)",
+      "Bash(head:*)"
     ]
   }
 }
