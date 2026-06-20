@@ -2,62 +2,60 @@
 
 import { useActionState } from 'react'
 import Link from 'next/link'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { resetPassword } from '@/features/auth/actions'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function ResetSenhaPage() {
   const [state, action, isPending] = useActionState(resetPassword, null)
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm p-8" style={{ border: '1px solid var(--border)' }}>
-        <div className="mb-6">
-          <Link href="/login" className="flex items-center gap-1.5 mb-6">
-            <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-              <path d="M9 1L2 5v8l7 4 7-4V5L9 1z" stroke="#c9a54c" strokeWidth="1.5" fill="none"/>
-              <path d="M9 1v16M2 5l7 4 7-4" stroke="#c9a54c" strokeWidth="1.5"/>
-            </svg>
-            <span style={{ color: 'var(--gold)', fontWeight: 700, letterSpacing: '0.08em' }}>TUVIA</span>
-          </Link>
-          <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Recuperar senha</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-            Enviaremos um link para o seu email
-          </p>
-        </div>
+    <Card className="w-full">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl">Recuperar senha</CardTitle>
+          <CardDescription>Enviaremos um link para o seu email</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {state?.success ? (
+            <div className="flex items-center gap-2 rounded-lg border border-status-no-prazo/20 bg-status-no-prazo-bg px-4 py-3 text-sm text-status-no-prazo">
+              <CheckCircle2 className="size-4 shrink-0" />
+              Email enviado! Verifique sua caixa de entrada.
+            </div>
+          ) : (
+            <form action={action} className="space-y-4">
+              {state?.error && (
+                <div role="alert" className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm bg-destructive/10 text-destructive border border-destructive/20">
+                  <AlertCircle className="size-4 shrink-0" />
+                  {state.error}
+                </div>
+              )}
 
-        {state?.success ? (
-          <div className="rounded-lg px-4 py-3 text-sm" style={{ background: '#d1fae5', color: '#065f46' }}>
-            Email enviado! Verifique sua caixa de entrada.
-          </div>
-        ) : (
-          <form action={action} className="space-y-4">
-            {state?.error && (
-              <div role="alert" className="rounded-lg px-4 py-3 text-sm" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-                {state.error}
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="seu@email.com"
+                />
               </div>
-            )}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                Email
-              </label>
-              <input
-                id="email" name="email" type="email" required placeholder="seu@email.com"
-                className="w-full px-3 py-2.5 text-sm rounded-lg outline-none"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-              />
-            </div>
-            <button
-              type="submit" disabled={isPending}
-              className="w-full py-3 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-              style={{ background: 'var(--teal)' }}
-            >
-              {isPending ? 'Enviando...' : 'Enviar'}
-            </button>
-            <div className="text-center text-sm">
-              <Link href="/login" style={{ color: 'var(--teal)' }} className="hover:underline">Voltar ao login</Link>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+
+              <Button type="submit" className="w-full" disabled={isPending}>
+                {isPending ? 'Enviando...' : 'Enviar link'}
+              </Button>
+
+              <p className="text-center text-sm text-muted-foreground">
+                <Link href="/login" className="text-primary hover:underline">
+                  Voltar ao login
+                </Link>
+              </p>
+            </form>
+          )}
+        </CardContent>
+    </Card>
   )
 }

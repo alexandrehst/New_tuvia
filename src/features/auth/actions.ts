@@ -80,6 +80,12 @@ export async function signUp(prevState: { error?: string } | null, formData: For
   redirect('/planos')
 }
 
+export async function signOut() {
+  const supabase = await createSupabaseServerClient()
+  await supabase.auth.signOut()
+  redirect('/login')
+}
+
 export async function resetPassword(prevState: { error?: string; success?: boolean } | null, formData: FormData) {
   const raw = { email: formData.get('email') as string }
 

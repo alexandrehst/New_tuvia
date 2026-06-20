@@ -1,0 +1,91 @@
+# generated: 2026-06-18
+# last_updated: 2026-06-18 (story 1-1 criada)
+# project: okr
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+#
+# DEPENDÊNCIAS (deste projeto):
+# - Epic 1 (Fundação) é pré-requisito de todos os demais.
+# - Epic 3 pode rodar em paralelo com Epic 2 (só depende do scaffold do Epic 1).
+# - Ordem de valor: Epic 2 (herói) cedo; Epic 5 (entrada pública) depois.
+# - Começar pela Story 1-1 (design system base).
+
+generated: 2026-06-18
+last_updated: 2026-06-19-epics-4-5-done
+project: okr
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1 — Fundação visual & navegação
+  epic-1: done
+  1-1-design-system-base: done
+  1-2-dark-mode-com-toggle-persistido: done
+  1-3-shell-autenticado: done
+  1-4-workspace-switcher: done
+  1-5-breadcrumb-de-hierarquia-de-planos: done
+  epic-1-retrospective: optional
+
+  # Epic 2 — Acompanhamento de OKRs (tela-herói)
+  epic-2: done
+  2-1-faixa-de-resumo-componentes-de-status: done
+  2-2-objetivos-em-colunas-cartoes-de-kr: done
+  2-3-atualizar-valor-de-kr: done
+  2-4-criar-e-editar-objetivo: done
+  2-5-excluir-elementos-com-confirmacao: done
+  2-6-historico-e-linha-de-tendencia-do-kr: done
+  2-7-criar-e-editar-kr: done
+  2-8-editar-plano: done
+  epic-2-retrospective: optional
+
+  # Epic 3 — Criação de planos
+  epic-3: done
+  3-1-lista-de-planos-navegavel: done
+  3-2-wizard-de-plano-estrategico: done
+  3-3-sugestao-de-ia-por-campo: done
+  3-4-publicar-plano-e-plano-de-apoio: done
+  epic-3-retrospective: optional
+
+  # Epic 4 — Gestão de usuários
+  epic-4: done
+  4-1-lista-de-membros-papeis-e-notificacoes: done
+  4-2-convidar-membro: done
+  epic-4-retrospective: optional
+
+  # Epic 5 — Entrada pública
+  epic-5: done
+  5-1-landing-comercial: done
+  5-2-login-e-reset-de-senha: done
+  5-3-cadastro: done
+  epic-5-retrospective: optional

@@ -8,7 +8,7 @@ test.describe('Autenticação', () => {
     await page.getByRole('button', { name: /avançar|entrar/i }).click()
 
     await expect(page).toHaveURL('/planos')
-    await expect(page.getByRole('heading', { name: /planos/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /bem-vindo/i })).toBeVisible()
   })
 
   test('login com senha errada exibe mensagem de erro', async ({ page }) => {

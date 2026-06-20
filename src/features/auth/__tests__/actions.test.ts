@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { signIn, signUp, resetPassword } from '../actions'
+import { signIn, signUp, resetPassword, signOut } from '../actions'
 import { redirect } from 'next/navigation'
 
 vi.mock('@/lib/supabase', () => ({
@@ -40,6 +40,7 @@ function makeSupabaseMock(overrides: Record<string, unknown> = {}) {
       signInWithPassword: vi.fn().mockResolvedValue({ error: null }),
       signUp: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null }),
       resetPasswordForEmail: vi.fn().mockResolvedValue({}),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
       ...overrides,
     },
   }
@@ -152,6 +153,18 @@ describe('signUp', () => {
     await signUp(null, makeFormData({ nome: 'João', email: 'joao@b.com', password: '12345678' }))
 
     expect(redirect).toHaveBeenCalledWith('/planos')
+  })
+})
+
+describe('signOut', () => {
+  it('encerra a sessão no Supabase e redireciona para /login', async () => {
+    const supabase = makeSupabaseMock()
+    mockCreateSupabase.mockResolvedValue(supabase)
+
+    await signOut()
+
+    expect(supabase.auth.signOut).toHaveBeenCalled()
+    expect(redirect).toHaveBeenCalledWith('/login')
   })
 })
 

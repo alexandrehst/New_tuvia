@@ -2,13 +2,16 @@
 
 import { prisma } from '@/lib/prisma'
 import { openai, MODELO_PADRAO } from '@/lib/openai'
-import { gerarLinhaTendencia } from '@/features/key-result/lib/calculos'
+import { gerarLinhaTendencia, calcularRisco } from '@/features/key-result/lib/calculos'
+import { requireUser, assertMesmoTenant } from '@/features/auth/guards'
 import { criadorPlanoSchema, type CriadorPlanoInput } from '@/features/criador-plano/schemas'
+import { updatePlanoSchema, type UpdatePlanoInput, createPlanoApoioSchema, type CreatePlanoApoioInput } from './schemas'
 
 export async function createPlanoCorporativo(
-  clienteId: string,
   rawData: CriadorPlanoInput
 ): Promise<{ planoId: string }> {
+  const user = await requireUser()
+  const clienteId = user.clienteId
   const data = criadorPlanoSchema.parse(rawData)
 
   // 1. Persist PlanoEstrategico
@@ -155,6 +158,91 @@ Responda em JSON: { "KeyResults": [{ "Description": "...", "ValorInicial": 0, "V
       })
     }
   }
+
+  return { planoId: plano.id }
+}
+
+export async function updatePlano(id: string, data: UpdatePlanoInput) {
+  const parsed = updatePlanoSchema.parse(data)
+
+  const anterior = await prisma.plano.findUniqueOrThrow({
+    where: { id },
+    select: { clienteId: true, dataInicio: true, dataFim: true },
+  })
+  const user = await requireUser()
+  assertMesmoTenant(anterior.clienteId, user.clienteId)
+
+  const plano = await prisma.plano.update({
+    where: { id },
+    data: {
+      titulo: parsed.titulo,
+      dataInicio: parsed.dataInicio,
+      dataFim: parsed.dataFim,
+      frequenciaAtualizacao: parsed.frequenciaAtualizacao,
+    },
+  })
+
+  // Datas mudaram? (campo enviado e diferente do anterior)
+  const datasMudaram =
+    (parsed.dataInicio !== undefined && +parsed.dataInicio !== +(anterior.dataInicio ?? NaN)) ||
+    (parsed.dataFim !== undefined && +parsed.dataFim !== +(anterior.dataFim ?? NaN))
+
+  // Risco e linha de tendência dependem das datas do plano → recomputar todos os KRs.
+  // progresso/valorAtual NÃO dependem de datas e não são tocados.
+  if (datasMudaram && plano.dataInicio && plano.dataFim) {
+    const krs = await prisma.resultadoChave.findMany({
+      where: { objetivo: { planoId: id } },
+      select: { id: true, tipoMetrica: true, valorInicial: true, valorAlvo: true, valorAtual: true },
+    })
+    for (const kr of krs) {
+      const tipoMetrica = kr.tipoMetrica as 'aumentar' | 'reduzir' | 'simNao'
+      const status = calcularRisco({
+        dataInicio: plano.dataInicio,
+        dataFim: plano.dataFim,
+        valorInicial: kr.valorInicial,
+        valorAlvo: kr.valorAlvo,
+        valorAtual: kr.valorAtual,
+        tipoMetrica,
+      })
+      await prisma.resultadoChave.update({ where: { id: kr.id }, data: { status } })
+      await prisma.linhaTendencia.deleteMany({ where: { resultadoChaveId: kr.id } })
+      const pontos = gerarLinhaTendencia({
+        dataInicio: plano.dataInicio,
+        dataFim: plano.dataFim,
+        valorInicial: kr.valorInicial,
+        valorAlvo: kr.valorAlvo,
+      })
+      await prisma.linhaTendencia.createMany({
+        data: pontos.map((p) => ({ resultadoChaveId: kr.id, data: p.data, valor: p.valor })),
+      })
+    }
+  }
+
+  return plano
+}
+
+export async function createPlanoDepartamento(data: CreatePlanoApoioInput) {
+  const user = await requireUser()
+  const parsed = createPlanoApoioSchema.parse(data)
+
+  // O plano-pai deve pertencer ao mesmo tenant
+  const pai = await prisma.plano.findUniqueOrThrow({
+    where: { id: parsed.planoPaiId },
+    select: { clienteId: true },
+  })
+  assertMesmoTenant(pai.clienteId, user.clienteId)
+
+  const plano = await prisma.plano.create({
+    data: {
+      clienteId: user.clienteId,
+      planoPaiId: parsed.planoPaiId,
+      titulo: parsed.titulo,
+      tipo: 'apoio',
+      status: 'edicao',
+      dataInicio: parsed.dataInicio,
+      dataFim: parsed.dataFim,
+    },
+  })
 
   return { planoId: plano.id }
 }
