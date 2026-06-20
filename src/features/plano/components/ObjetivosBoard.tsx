@@ -61,17 +61,29 @@ type ConfirmState =
 // Painel de histórico — busca lazy ao montar (getKRHistorico é Server Action)
 function HistoricoPanelContent({ krId }: { krId: string }) {
   const [data, setData] = useState<{ historico: SeriePonto[]; tendencia: SeriePonto[] } | null>(null)
+  const [erro, setErro] = useState(false)
 
   useEffect(() => {
     let active = true
-    getKRHistorico(krId).then((d) => {
-      if (active) setData(d)
-    })
+    getKRHistorico(krId)
+      .then((d) => {
+        if (active) setData(d)
+      })
+      .catch(() => {
+        if (active) setErro(true)
+      })
     return () => {
       active = false
     }
   }, [krId])
 
+  if (erro) {
+    return (
+      <p role="alert" className="py-10 text-center text-sm text-destructive">
+        Não foi possível carregar o histórico. Tente novamente.
+      </p>
+    )
+  }
   if (!data) return <Skeleton className="h-48 w-full" />
   return <HistoricoChart historico={data.historico} tendencia={data.tendencia} />
 }
@@ -306,9 +318,13 @@ export function ObjetivosBoard({
               : `Excluir "${confirm.descricao}"? O histórico de valores será removido.`
           }
           onConfirm={async () => {
-            if (confirm.tipo === "objetivo") await deleteObjetivo(confirm.id)
-            else await deleteKeyResult(confirm.id)
-            router.refresh()
+            try {
+              if (confirm.tipo === "objetivo") await deleteObjetivo(confirm.id)
+              else await deleteKeyResult(confirm.id)
+              router.refresh()
+            } catch {
+              setAnnounce("Não foi possível excluir. Tente novamente.")
+            }
           }}
         />
       )}

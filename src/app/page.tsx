@@ -2,6 +2,7 @@ import Link from "next/link"
 import { LineChart, Sparkles, Users, ArrowRight, Check } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { CurrentYear } from "@/components/current-year"
 
 const BENEFICIOS = [
   {
@@ -128,7 +129,7 @@ export default function Home() {
             <span className="flex size-5 items-center justify-center rounded bg-primary text-[10px] font-bold text-primary-foreground">O</span>
             <span className="font-medium text-foreground">OKR</span>
           </div>
-          <p>© {new Date().getFullYear()} OKR. Todos os direitos reservados.</p>
+          <p>© <CurrentYear /> OKR. Todos os direitos reservados.</p>
         </div>
       </footer>
     </div>

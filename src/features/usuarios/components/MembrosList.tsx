@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Trash2 } from "lucide-react"
 
@@ -110,12 +110,18 @@ export function MembrosList({ membros }: { membros: Membro[] }) {
   const [announce, setAnnounce] = useState("")
   const [confirmRemove, setConfirmRemove] = useState<{ id: string; label: string } | null>(null)
 
+  // marcador zero-width alternado força o leitor de tela a reanunciar mensagens repetidas
+  const tick = useRef(0)
+  const anunciar = (msg: string) => {
+    tick.current += 1
+    setAnnounce(msg + "​".repeat(tick.current % 2))
+  }
   const onSaved = () => {
-    setAnnounce("Alterações salvas")
+    anunciar("Alterações salvas")
     router.refresh()
   }
   const onError = () => {
-    setAnnounce("Não foi possível salvar. Tente novamente.")
+    anunciar("Não foi possível salvar. Tente novamente.")
   }
 
   if (membros.length === 0) {

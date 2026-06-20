@@ -182,10 +182,11 @@ export async function updatePlano(id: string, data: UpdatePlanoInput) {
     },
   })
 
-  // Datas mudaram? (campo enviado e diferente do anterior)
+  // Datas mudaram? Compara por DIA (UTC) — evita recompute espúrio por diferença de hora.
+  const dia = (d: Date | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : null)
   const datasMudaram =
-    (parsed.dataInicio !== undefined && +parsed.dataInicio !== +(anterior.dataInicio ?? NaN)) ||
-    (parsed.dataFim !== undefined && +parsed.dataFim !== +(anterior.dataFim ?? NaN))
+    (parsed.dataInicio !== undefined && dia(parsed.dataInicio) !== dia(anterior.dataInicio)) ||
+    (parsed.dataFim !== undefined && dia(parsed.dataFim) !== dia(anterior.dataFim))
 
   // Risco e linha de tendência dependem das datas do plano → recomputar todos os KRs.
   // progresso/valorAtual NÃO dependem de datas e não são tocados.

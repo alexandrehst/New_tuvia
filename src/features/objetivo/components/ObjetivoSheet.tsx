@@ -70,16 +70,17 @@ export function ObjetivoSheet({
 
     startTransition(async () => {
       try {
+        const descricaoVal = descricao.trim()
         const base = {
           titulo: titulo.trim(),
-          descricao: descricao.trim() || undefined,
           numero: initial?.numero ?? proximoNumero ?? 1,
           responsaveisIds: Array.from(responsaveis),
         }
         if (mode === "editar" && initial) {
-          await updateObjetivo(initial.id, base) // updateObjetivoSchema não inclui planoId
+          // string vazia limpa a descrição; updateObjetivoSchema não inclui planoId
+          await updateObjetivo(initial.id, { ...base, descricao: descricaoVal })
         } else {
-          await createObjetivo({ planoId, ...base })
+          await createObjetivo({ planoId, ...base, descricao: descricaoVal || undefined })
         }
         router.refresh()
         onOpenChange(false)

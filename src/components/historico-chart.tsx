@@ -11,7 +11,8 @@ function toTime(d: Date | string): number {
 }
 
 function fmtData(t: number): string {
-  return new Date(t).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+  // UTC para casar com as datas armazenadas (meia-noite UTC) e evitar off-by-one em fusos negativos.
+  return new Date(t).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" })
 }
 
 function buildPath(
