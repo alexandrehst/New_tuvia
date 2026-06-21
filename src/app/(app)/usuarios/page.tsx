@@ -1,18 +1,13 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { createSupabaseServerClient } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
+import { getCurrentUser } from '@/features/auth/guards'
 import { getMembros } from '@/features/usuarios/queries'
 import { MembrosList } from '@/features/usuarios/components/MembrosList'
 import { ConvidarMembroButton } from '@/features/usuarios/components/ConvidarMembroButton'
 
 export default async function UsuariosPage() {
-  const supabase = await createSupabaseServerClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
-
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } })
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
 
   const membros = await getMembros(user.clienteId)

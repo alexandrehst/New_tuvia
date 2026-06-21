@@ -7,11 +7,11 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServerClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (!session) redirect('/login')
+  if (!user) redirect('/login')
 
-  const email = session.user.email ?? ''
+  const email = user.email ?? ''
   const sidebarData = await getSidebarData(email)
   const nome = sidebarData?.user?.nome
   const clienteNome = sidebarData?.user?.cliente?.nome

@@ -3,18 +3,13 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
-import { createSupabaseServerClient } from '@/lib/supabase'
-import { prisma } from '@/lib/prisma'
+import { getCurrentUser } from '@/features/auth/guards'
 import { getPlanos } from '@/features/plano/queries'
 import { PlanoCard } from '@/features/plano/components/PlanoCard'
 import { Button } from '@/components/ui/button'
 
 export default async function PlanosPage() {
-  const supabase = await createSupabaseServerClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
-
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } })
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
 
   const planos = await getPlanos(user.clienteId)

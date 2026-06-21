@@ -1,12 +1,13 @@
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { prisma } from '@/lib/prisma'
 
-/** Usuário autenticado atual (ou null). Para uso em Server Actions/Components. */
+/** Usuário autenticado atual (ou null). Para uso em Server Actions/Components.
+ *  Usa getUser() — revalida o JWT no Auth server (não confia só no cookie, ao contrário de getSession). */
 export async function getCurrentUser() {
   const supabase = await createSupabaseServerClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return null
-  return prisma.user.findUnique({ where: { id: session.user.id } })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  return prisma.user.findUnique({ where: { id: user.id } })
 }
 
 /** Exige um usuário autenticado; lança se não houver sessão. */
