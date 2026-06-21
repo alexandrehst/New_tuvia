@@ -53,7 +53,8 @@
       "Bash(awk 'f{print} /### Story 5.3/{f=1} /Riscos|Dependências|Sequenc|## Epic|Epilogue/{if\\(f\\)exit}' _bmad-output/planning-artifacts/epics.md)",
       "Bash(grep -nA4 \"generator\" prisma/schema.prisma)",
       "Bash(node -e \"console.log\\(require\\('./node_modules/@sentry/nextjs/package.json'\\).version\\)\")",
-      "Bash(node -e \"const S=require\\('@sentry/nextjs'\\); console.log\\('captureRequestError:', typeof S.captureRequestError\\); console.log\\('captureRouterTransitionStart:', typeof S.captureRouterTransitionStart\\)\")"
+      "Bash(node -e \"const S=require\\('@sentry/nextjs'\\); console.log\\('captureRequestError:', typeof S.captureRequestError\\); console.log\\('captureRouterTransitionStart:', typeof S.captureRouterTransitionStart\\)\")",
+      "Bash(awk '{print $2}')"
     ]
   }
 }
