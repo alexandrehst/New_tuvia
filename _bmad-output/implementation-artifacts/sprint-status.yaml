@@ -1,5 +1,5 @@
 # generated: 2026-06-18
-# last_updated: 2026-06-18 (story 1-1 criada)
+# last_updated: 2026-06-23-code-review-epic6-10-patches-aplicados
 # project: okr
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Começar pela Story 1-1 (design system base).
 
 generated: 2026-06-18
-last_updated: 2026-06-21-retrospectiva-consolidada
+last_updated: 2026-06-23-code-review-epic6-10-patches-aplicados
 project: okr
 project_key: NOKEY
 tracking_system: file-system
@@ -89,3 +89,13 @@ development_status:
   5-2-login-e-reset-de-senha: done
   5-3-cadastro: done
   epic-5-retrospective: done
+
+  # Epic 6 — Contrato Comportamental & de Segurança (Sprint Change Proposal 2026-06-22)
+  epic-6: in-progress                             # 6.2–6.6 done; falta só 6.1
+  6-1-contrato-de-auth-e-sessao: backlog
+  6-2-redefinicao-de-senha-nova-senha: done
+  6-3-onboarding-bootstrap-de-tenant: done
+  6-4-ciclo-de-vida-do-plano: done
+  6-5-enforcement-de-papel-por-plano: done
+  6-6-rls-no-postgres: done                        # Opção C entregue; Opção B é follow-up (deferred-work.md)
+  epic-6-retrospective: optional

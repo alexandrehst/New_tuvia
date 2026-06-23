@@ -1,18 +1,15 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { requireUser, assertMesmoTenant } from '@/features/auth/guards'
+import { requireUser, assertPodeMutarPlano } from '@/features/auth/guards'
 import { createObjetivoSchema, updateObjetivoSchema, type CreateObjetivoInput, type UpdateObjetivoInput } from './schemas'
 
 export async function createObjetivo(data: CreateObjetivoInput) {
   const parsed = createObjetivoSchema.parse(data)
 
-  const plano = await prisma.plano.findUniqueOrThrow({
-    where: { id: parsed.planoId },
-    select: { clienteId: true },
-  })
   const user = await requireUser()
-  assertMesmoTenant(plano.clienteId, user.clienteId)
+  // Criar objetivo = edição estrutural (editor + somente estado `edicao`); guard faz tenant→papel→estado.
+  await assertPodeMutarPlano(parsed.planoId, user, 'editarEstrutura')
 
   const objetivo = await prisma.objetivo.create({
     data: {
@@ -41,10 +38,10 @@ export async function updateObjetivo(id: string, data: UpdateObjetivoInput) {
 
   const atual = await prisma.objetivo.findUniqueOrThrow({
     where: { id },
-    select: { plano: { select: { clienteId: true } } },
+    select: { planoId: true },
   })
   const user = await requireUser()
-  assertMesmoTenant(atual.plano.clienteId, user.clienteId)
+  await assertPodeMutarPlano(atual.planoId, user, 'editarEstrutura')
 
   const objetivo = await prisma.objetivo.update({
     where: { id },
@@ -69,10 +66,10 @@ export async function updateObjetivo(id: string, data: UpdateObjetivoInput) {
 export async function deleteObjetivo(id: string) {
   const atual = await prisma.objetivo.findUniqueOrThrow({
     where: { id },
-    select: { plano: { select: { clienteId: true } } },
+    select: { planoId: true },
   })
   const user = await requireUser()
-  assertMesmoTenant(atual.plano.clienteId, user.clienteId)
+  await assertPodeMutarPlano(atual.planoId, user, 'editarEstrutura')
 
   await prisma.objetivo.delete({ where: { id } })
 }

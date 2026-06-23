@@ -30,6 +30,6 @@ export default defineConfig({
         'prisma/**',
       ],
     },
-    exclude: ['node_modules', 'tests/e2e/**'],
+    exclude: ['**/node_modules/**', '.next/**', 'tests/e2e/**'],
   },
 })

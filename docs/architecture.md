@@ -229,11 +229,48 @@ Todas as mutações via **Server Actions**. API Routes apenas para webhooks e in
 |---|---|---|
 | Mutações | Server Actions | Reduz boilerplate de API, tipagem end-to-end com Zod |
 | IA streaming | Route Handlers com `ReadableStream` | UX responsiva; evita timeout em respostas longas |
-| Multi-tenancy | Row-Level Security no Supabase | Isolamento por `clienteId` garantido no banco |
+| Multi-tenancy | Guard de aplicação (primário) + RLS por `clienteId` (rede secundária) | Isolamento por `clienteId`. Ver "Isolamento multi-tenant" abaixo — a RLS hoje **não** cobre o caminho Prisma (role `postgres` BYPASSRLS); a defesa primária é o código. |
 | Auth | Supabase Auth | Integra nativamente com RLS; suporta convite por email |
 | ORM | Prisma | Type-safety, migrations versionadas, seed fácil |
 | Testes unitários | Vitest | Performance, compatível com ESM, mock nativo |
 | Testes E2E | Playwright | Suporte a múltiplos browsers, CI-friendly |
+
+### 7.1 Isolamento multi-tenant: aplicação (primária) + RLS (secundária)
+
+> Decisão D4 do Epic 6 (Story 6.6) — Opção C. Ver
+> `_bmad-output/planning-artifacts/architecture-epic6-seguranca.md`.
+
+**Defesa PRIMÁRIA — guard de aplicação.** Todo acesso a dados de domínio é via
+**Prisma**, que conecta por connection string (`DATABASE_URL`/`DIRECT_URL`) com o
+role **`postgres`** — superuser do Supabase, que tem **`BYPASSRLS`**. O
+`supabase-js` é usado **apenas para Auth** (`auth.getUser()`), não para ler/gravar
+domínio. Portanto, o isolamento real entre tenants é garantido **no código**:
+
+- `assertMesmoTenant` / `requireUser` / `requireAdmin` em `src/features/auth/guards.ts`;
+- filtro `clienteId` no `where` de toda query/mutação (ex.: o IDOR corrigido em
+  `src/features/plano/queries.ts`).
+
+Esquecer um único filtro vaza dados de outro tenant — por isso o guard é
+disciplina obrigatória, não opcional.
+
+**Rede SECUNDÁRIA — RLS no Postgres.** A DDL versionada em
+`prisma/sql/rls_tenant_isolation.sql` habilita `ROW LEVEL SECURITY` e cria
+policies por `clienteId` em todas as tabelas de domínio (tabelas-filhas como
+`HistoricoValores`/`LinhaTendencia` derivam o tenant por saltos de FK até
+`Plano.clienteId`, via `EXISTS`). As policies leem o tenant de
+`current_setting('app.current_tenant', true)` e o role `anon` tem o acesso
+revogado (nega por padrão).
+
+Hoje essa RLS **não** protege o caminho do Prisma (role `postgres` bypassa). Ela
+só passa a atuar quando o banco for acessado por uma conexão **sujeita a RLS**:
+via supabase-js (role `authenticated`), ou via Prisma sob um role
+não-privilegiado que injeta `SET LOCAL app.current_tenant = '<clienteId>'` por
+transação — a **Opção B**, registrada como endurecimento futuro (story dedicada),
+**fora do escopo** da 6.6.
+
+**Aplicação e roles.** A RLS é aplicada explicitamente (não por `db:push`); ver
+`prisma/sql/README.md`. Conexões de DDL/migrate/seed (`DIRECT_URL`, role
+`postgres`) continuam bypassando RLS de propósito, para não travar deploys/seed.
 
 ---
 

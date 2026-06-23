@@ -3,7 +3,8 @@
 import { prisma } from '@/lib/prisma'
 import { openai, MODELO_PADRAO } from '@/lib/openai'
 import { gerarLinhaTendencia, calcularRisco } from '@/features/key-result/lib/calculos'
-import { requireUser, assertMesmoTenant } from '@/features/auth/guards'
+import { requireUser, assertPodeMutarPlano } from '@/features/auth/guards'
+import { assertTransicaoPlano, type StatusPlano } from './lib/status'
 import { criadorPlanoSchema, type CriadorPlanoInput } from '@/features/criador-plano/schemas'
 import { updatePlanoSchema, type UpdatePlanoInput, createPlanoApoioSchema, type CreatePlanoApoioInput } from './schemas'
 
@@ -74,7 +75,7 @@ Responda em JSON com o formato: { "Objectives": [{ "Title": "...", "Description"
     ]
   }
 
-  // 3. Create Plano
+  // 3. Create Plano + vínculo owner do criador (D2 — pré-requisito do enforcement de papel)
   const plano = await prisma.plano.create({
     data: {
       clienteId,
@@ -84,6 +85,7 @@ Responda em JSON com o formato: { "Objectives": [{ "Title": "...", "Description"
       dataInicio: data.dataInicio,
       dataFim: data.dataFim,
       frequenciaAtualizacao: 'mensal',
+      usuarios: { create: { userId: user.id, papel: 'owner' } },
     },
   })
 
@@ -170,7 +172,8 @@ export async function updatePlano(id: string, data: UpdatePlanoInput) {
     select: { clienteId: true, dataInicio: true, dataFim: true },
   })
   const user = await requireUser()
-  assertMesmoTenant(anterior.clienteId, user.clienteId)
+  // Editar metadados/datas do plano = edição estrutural (editor + somente estado `edicao`).
+  await assertPodeMutarPlano(id, user, 'editarEstrutura')
 
   const plano = await prisma.plano.update({
     where: { id },
@@ -226,13 +229,10 @@ export async function createPlanoDepartamento(data: CreatePlanoApoioInput) {
   const user = await requireUser()
   const parsed = createPlanoApoioSchema.parse(data)
 
-  // O plano-pai deve pertencer ao mesmo tenant
-  const pai = await prisma.plano.findUniqueOrThrow({
-    where: { id: parsed.planoPaiId },
-    select: { clienteId: true },
-  })
-  assertMesmoTenant(pai.clienteId, user.clienteId)
+  // Criar plano de apoio sob um plano-pai exige owner do pai (tenant + papel via contrato).
+  await assertPodeMutarPlano(parsed.planoPaiId, user, 'gerirPlano')
 
+  // O criador vira owner do novo plano de apoio (D2).
   const plano = await prisma.plano.create({
     data: {
       clienteId: user.clienteId,
@@ -242,8 +242,48 @@ export async function createPlanoDepartamento(data: CreatePlanoApoioInput) {
       status: 'edicao',
       dataInicio: parsed.dataInicio,
       dataFim: parsed.dataFim,
+      usuarios: { create: { userId: user.id, papel: 'owner' } },
     },
   })
 
   return { planoId: plano.id }
+}
+
+// ─────────────────────────────────────────────
+// Máquina de estado do Plano (Story 6.4 — D3). Transições exigem papel `owner`.
+// ─────────────────────────────────────────────
+
+async function transicionarPlano(planoId: string, para: StatusPlano) {
+  const user = await requireUser()
+  // tenant + papel owner (a operação 'transicao' não é barrada pelo estado aqui;
+  // a validade da transição em si é checada pela máquina de estado abaixo).
+  const { status } = await assertPodeMutarPlano(planoId, user, 'transicao')
+  // Idempotente: pedir o estado atual é no-op benigno (ex.: duplo-clique), não erro.
+  if (status === para) return { status: para }
+  assertTransicaoPlano(status, para)
+  // Compare-and-swap: só aplica se o estado ainda for o que lemos (fecha a janela TOCTOU
+  // entre a leitura e a escrita quando há cliques/atores concorrentes).
+  const { count } = await prisma.plano.updateMany({
+    where: { id: planoId, status: status as StatusPlano },
+    data: { status: para },
+  })
+  if (count === 0) {
+    throw new Error('O estado do plano mudou. Recarregue a página e tente novamente.')
+  }
+  return { status: para }
+}
+
+/** edicao → publicado ("Ativar"). */
+export async function ativarPlano(planoId: string) {
+  return transicionarPlano(planoId, 'publicado')
+}
+
+/** edicao | publicado → arquivado ("Arquivar"). Terminal. */
+export async function arquivarPlano(planoId: string) {
+  return transicionarPlano(planoId, 'arquivado')
+}
+
+/** publicado → edicao ("Editar" reabre um plano Ativo para planejamento). */
+export async function reabrirPlano(planoId: string) {
+  return transicionarPlano(planoId, 'edicao')
 }

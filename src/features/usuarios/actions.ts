@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { sendEmail, TEMPLATES } from '@/lib/brevo'
-import { requireAdmin, assertMesmoTenant } from '@/features/auth/guards'
+import { requireUser, requireAdmin, assertMesmoTenant, assertPodeMutarPlano } from '@/features/auth/guards'
 import { papelSchema, notificacaoCampoSchema, inviteUserSchema, type Papel, type NotificacaoCampo, type InviteUserInput } from './schemas'
 
 const CAMPO_NOTIFICACAO: Record<NotificacaoCampo, 'atualizacaoEmailPlano' | 'atualizacaoEmailObjetivo' | 'atualizacaoEmailResultado'> = {
@@ -11,16 +11,17 @@ const CAMPO_NOTIFICACAO: Record<NotificacaoCampo, 'atualizacaoEmailPlano' | 'atu
   resultado: 'atualizacaoEmailResultado',
 }
 
-/** Atualiza o papel de um vínculo plano-usuário (admin do mesmo tenant). */
+/** Atualiza o papel de um vínculo plano-usuário (gerir plano = owner; admin = owner implícito). */
 export async function updatePapel(planoUsuarioId: string, papel: Papel) {
-  const admin = await requireAdmin()
   const parsed = papelSchema.parse(papel)
 
   const vinculo = await prisma.planoUsuario.findUnique({
     where: { id: planoUsuarioId },
-    select: { plano: { select: { clienteId: true } } },
+    select: { planoId: true },
   })
-  assertMesmoTenant(vinculo?.plano.clienteId, admin.clienteId)
+  if (!vinculo) throw new Error('Recurso não encontrado')
+  const user = await requireUser()
+  await assertPodeMutarPlano(vinculo.planoId, user, 'gerirPlano')
 
   await prisma.planoUsuario.update({
     where: { id: planoUsuarioId },
@@ -42,15 +43,15 @@ export async function updateNotificacao(userId: string, campo: NotificacaoCampo,
   })
 }
 
-/** Remove um usuário de um plano (deleta o vínculo, não o usuário) — admin do mesmo tenant. */
+/** Remove um usuário de um plano (deleta o vínculo, não o usuário) — gerir plano = owner. */
 export async function removerMembroDoPlano(planoUsuarioId: string) {
-  const admin = await requireAdmin()
-
   const vinculo = await prisma.planoUsuario.findUnique({
     where: { id: planoUsuarioId },
-    select: { plano: { select: { clienteId: true } } },
+    select: { planoId: true },
   })
-  assertMesmoTenant(vinculo?.plano.clienteId, admin.clienteId)
+  if (!vinculo) throw new Error('Recurso não encontrado')
+  const user = await requireUser()
+  await assertPodeMutarPlano(vinculo.planoId, user, 'gerirPlano')
 
   await prisma.planoUsuario.delete({ where: { id: planoUsuarioId } })
 }

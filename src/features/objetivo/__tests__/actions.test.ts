@@ -21,20 +21,19 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('@/features/auth/guards', () => ({
-  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1' })),
-  assertMesmoTenant: (recurso: string | null | undefined, usuario: string) => {
-    if (recurso !== usuario) throw new Error('Recurso não encontrado')
-  },
+  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1', tipoUser: 'admin' })),
+  // Autorização (tenant→papel→estado) é testada em guards.test.ts; aqui é no-op por padrão.
+  assertPodeMutarPlano: vi.fn(async () => ({ clienteId: 'cliente-1', status: 'edicao' })),
 }))
 
 import { prisma } from '@/lib/prisma'
+import { assertPodeMutarPlano } from '@/features/auth/guards'
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockPrisma.plano.findUniqueOrThrow.mockResolvedValue({ clienteId: 'cliente-1' })
-  mockPrisma.objetivo.findUniqueOrThrow.mockResolvedValue({ plano: { clienteId: 'cliente-1' } })
+  mockPrisma.objetivo.findUniqueOrThrow.mockResolvedValue({ planoId: validCuid })
 })
 
 describe('createObjetivo', () => {
@@ -57,6 +56,8 @@ describe('createObjetivo', () => {
     })
     expect(mockPrisma.objetivoResponsavel.createMany).not.toHaveBeenCalled()
     expect(result).toEqual(fakeObjetivo)
+    // Garante a OPERAÇÃO correta no contrato (operação errada afrouxaria a regra de estado).
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith(validCuid, expect.anything(), 'editarEstrutura')
   })
 
   it('cria objetivo com responsáveis', async () => {
@@ -95,8 +96,8 @@ describe('createObjetivo', () => {
     ).rejects.toThrow()
   })
 
-  it('bloqueia criação em plano de outro tenant', async () => {
-    mockPrisma.plano.findUniqueOrThrow.mockResolvedValue({ clienteId: 'cliente-2' })
+  it('bloqueia criação quando o guard nega (outro tenant / papel / estado)', async () => {
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Acesso negado'))
     await expect(
       createObjetivo({ planoId: validCuid, titulo: 'Crescer receita', numero: 1 })
     ).rejects.toThrow()
@@ -156,8 +157,8 @@ describe('deleteObjetivo', () => {
     expect(mockPrisma.objetivo.delete).toHaveBeenCalledWith({ where: { id: validCuid } })
   })
 
-  it('bloqueia exclusão de outro tenant', async () => {
-    mockPrisma.objetivo.findUniqueOrThrow.mockResolvedValue({ plano: { clienteId: 'cliente-2' } })
+  it('bloqueia exclusão quando o guard nega', async () => {
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Acesso negado'))
     await expect(deleteObjetivo(validCuid)).rejects.toThrow()
     expect(mockPrisma.objetivo.delete).not.toHaveBeenCalled()
   })

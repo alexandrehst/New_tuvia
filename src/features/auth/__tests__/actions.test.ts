@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { signIn, signUp, resetPassword, signOut } from '../actions'
+import { signIn, signUp, resetPassword, signOut, definirNovaSenha } from '../actions'
 import { redirect } from 'next/navigation'
 
 vi.mock('@/lib/supabase', () => ({
@@ -38,8 +38,9 @@ function makeSupabaseMock(overrides: Record<string, unknown> = {}) {
   return {
     auth: {
       signInWithPassword: vi.fn().mockResolvedValue({ error: null }),
-      signUp: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null }),
+      signUp: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' }, session: { access_token: 'tok' } }, error: null }),
       resetPasswordForEmail: vi.fn().mockResolvedValue({}),
+      updateUser: vi.fn().mockResolvedValue({ error: null }),
       signOut: vi.fn().mockResolvedValue({ error: null }),
       ...overrides,
     },
@@ -154,6 +155,20 @@ describe('signUp', () => {
 
     expect(redirect).toHaveBeenCalledWith('/planos')
   })
+
+  it('não loga e pede confirmação quando o signUp não devolve sessão', async () => {
+    const supabase = makeSupabaseMock()
+    supabase.auth.signUp = vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' }, session: null }, error: null })
+    mockCreateSupabase.mockResolvedValue(supabase)
+    mockPrisma.cliente.create.mockResolvedValue({ id: 'cliente-1' })
+    mockPrisma.user.create.mockResolvedValue({})
+    vi.mocked(sendEmail).mockResolvedValue(undefined)
+
+    const result = await signUp(null, makeFormData({ nome: 'João', email: 'joao@b.com', password: '12345678' }))
+
+    expect(result).toEqual({ success: true })
+    expect(redirect).not.toHaveBeenCalled()
+  })
 })
 
 describe('signOut', () => {
@@ -183,7 +198,7 @@ describe('resetPassword', () => {
 
     expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(
       'a@b.com',
-      expect.objectContaining({ redirectTo: expect.stringContaining('/nova-senha') })
+      expect.objectContaining({ redirectTo: expect.stringContaining('/auth/confirm') })
     )
   })
 
@@ -193,5 +208,55 @@ describe('resetPassword', () => {
     const result = await resetPassword(null, makeFormData({ email: 'a@b.com' }))
 
     expect(result).toEqual({ success: true })
+  })
+})
+
+describe('definirNovaSenha', () => {
+  it('retorna erro quando as senhas não conferem sem chamar Supabase', async () => {
+    const result = await definirNovaSenha(
+      null,
+      makeFormData({ password: '12345678', confirmar: '87654321' }),
+    )
+    expect(result?.error).toBeDefined()
+    expect(mockCreateSupabase).not.toHaveBeenCalled()
+  })
+
+  it('retorna erro quando a senha é muito curta sem chamar Supabase', async () => {
+    const result = await definirNovaSenha(
+      null,
+      makeFormData({ password: '123', confirmar: '123' }),
+    )
+    expect(result?.error).toBeDefined()
+    expect(mockCreateSupabase).not.toHaveBeenCalled()
+  })
+
+  it('retorna erro orientando novo link quando o updateUser falha', async () => {
+    const supabase = makeSupabaseMock()
+    supabase.auth.updateUser = vi.fn().mockResolvedValue({ error: { message: 'no session' } })
+    mockCreateSupabase.mockResolvedValue(supabase)
+
+    const result = await definirNovaSenha(
+      null,
+      makeFormData({ password: '12345678', confirmar: '12345678' }),
+    )
+
+    expect(result?.error).toBeDefined()
+    // Mesmo na falha, encerra a sessão de recovery (não deixa o usuário com acesso ao app).
+    expect(supabase.auth.signOut).toHaveBeenCalled()
+    expect(redirect).not.toHaveBeenCalled()
+  })
+
+  it('atualiza a senha, encerra a sessão e redireciona para /login em caso de sucesso', async () => {
+    const supabase = makeSupabaseMock()
+    mockCreateSupabase.mockResolvedValue(supabase)
+
+    await definirNovaSenha(
+      null,
+      makeFormData({ password: '12345678', confirmar: '12345678' }),
+    )
+
+    expect(supabase.auth.updateUser).toHaveBeenCalledWith({ password: '12345678' })
+    expect(supabase.auth.signOut).toHaveBeenCalled()
+    expect(redirect).toHaveBeenCalledWith('/login')
   })
 })

@@ -55,7 +55,7 @@ O sucesso é primariamente **qualitativo** (percepção/credibilidade). Métrica
 
 **Fora de escopo:**
 
-- Features novas ou mudança de regras de negócio (cálculo de progresso/risco, hierarquia, multi-tenant, papéis, integrações de IA/e-mail permanecem como são).
+- Features novas ou mudança de regras de negócio (cálculo de progresso/risco, hierarquia, multi-tenant, papéis, integrações de IA/e-mail permanecem como são). **Ressalva (2026-06-22):** auth, autorização a nível de objeto e ciclo de vida do plano foram fora-de-escopo aqui e são tratados separadamente — ver §13.
 - Mudanças de backend, schema, Server Actions ou contratos de dados — salvo ajustes mínimos de apresentação.
 - Mobile como cidadão de primeira classe (telas mobile dedicadas) — fora por ora.
 - Internacionalização além de **pt-BR** (idioma do domínio e da UI permanece pt-BR).
@@ -200,6 +200,20 @@ Capacidades, não implementação — detalhe técnico em `addendum.md`.
 PRD leve → **`bmad-ux`** (especificação de UX/UI e design system detalhado sobre estes FRs) → `bmad-create-architecture` (se houver impacto) → `bmad-create-epics-and-stories`.
 
 ---
+
+## 13. Contrato Comportamental & de Segurança (adendo — 2026-06-22)
+
+> Adendo de escopo, fora do redesenho de UX original. Ver `sprint-change-proposal-2026-06-22.md` e Epic 6 em `epics.md`.
+
+Este PRD especificou **telas e happy-paths**, mas não os **contratos de comportamento**: máquinas de estado, autorização a nível de objeto e política de identidade. A auditoria pós-testes (2026-06-22) mostrou que essa lacuna produziu uma classe de erro grave (ex.: IDOR cross-tenant; rotas de IA sem auth; cadastro sem verificação) — alguns inclusive **codificados como AC** (Story 5.3). O contrato abaixo passa a ser requisito, implementado no **Epic 6**:
+
+- **CB-1 — Contrato de auth/sessão:** matriz de acesso por estado (`anônimo | autenticado-não-verificado | autenticado`); rotas públicas barram usuário logado; área `(app)` exige sessão; **cadastro exige verificação de e-mail** (não autentica antes de confirmar).
+- **CB-2 — Redefinição de senha completa:** `/nova-senha` recebe a sessão de recovery; fluxo de reset ponta-a-ponta.
+- **CB-3 — Onboarding / bootstrap de tenant:** primeiro acesso conduz ao primeiro plano em vez de uma app vazia.
+- **CB-4 — Ciclo de vida do Plano:** `StatusPlano {edicao, publicado, arquivado}` com transições e a regra "edicao edita; publicado só atualiza valores".
+- **CB-5 — Autorização por papel:** `PapelPlano {owner, editor, viewer}` **imposto no backend** (não só ocultado na UI).
+- **CB-6 — Isolamento multi-tenant em profundidade:** RLS no Postgres por `clienteId`, redundante aos guards de aplicação.
+- **CB-7 — Regressão travada:** isolamento cross-tenant (IDOR) e auth+validação nas rotas `/api/ai/*` permanecem como critérios de aceitação permanentes.
 
 ## 11. Glossário
 

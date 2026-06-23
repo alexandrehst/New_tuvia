@@ -6,6 +6,7 @@ vi.mock('@/lib/prisma', () => ({
     plano: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -19,6 +20,7 @@ const mockPrisma = prisma as unknown as {
   plano: {
     findMany: ReturnType<typeof vi.fn>
     findUnique: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
   }
   user: {
     findUnique: ReturnType<typeof vi.fn>
@@ -78,47 +80,68 @@ describe('getPlanoWithObjetivos', () => {
       ],
       planosFilhos: [],
     }
-    mockPrisma.plano.findUnique.mockResolvedValue(fakePlano)
+    mockPrisma.plano.findFirst.mockResolvedValue(fakePlano)
 
-    const result = await getPlanoWithObjetivos('plan1')
+    const result = await getPlanoWithObjetivos('plan1', 'cliente-123')
 
-    expect(mockPrisma.plano.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'plan1' } })
+    expect(mockPrisma.plano.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'plan1', clienteId: 'cliente-123' } })
     )
     expect(result).toEqual(fakePlano)
   })
 
+  it('escopa a busca pelo clienteId do usuário (tenant isolation)', async () => {
+    mockPrisma.plano.findFirst.mockResolvedValue(null)
+
+    await getPlanoWithObjetivos('plan1', 'cliente-123')
+
+    const call = mockPrisma.plano.findFirst.mock.calls[0][0]
+    expect(call.where.clienteId).toBe('cliente-123')
+  })
+
+  it('não retorna plano de outro cliente (cross-tenant IDOR)', async () => {
+    // Prisma com where: { id, clienteId } não casa um plano de outro tenant -> null.
+    mockPrisma.plano.findFirst.mockResolvedValue(null)
+
+    const result = await getPlanoWithObjetivos('plano-de-outro-cliente', 'cliente-123')
+
+    expect(result).toBeNull()
+    expect(mockPrisma.plano.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'plano-de-outro-cliente', clienteId: 'cliente-123' } })
+    )
+  })
+
   it('retorna null quando plano não existe', async () => {
-    mockPrisma.plano.findUnique.mockResolvedValue(null)
-    const result = await getPlanoWithObjetivos('nao-existe')
+    mockPrisma.plano.findFirst.mockResolvedValue(null)
+    const result = await getPlanoWithObjetivos('nao-existe', 'cliente-123')
     expect(result).toBeNull()
   })
 
   it('inclui linhaTendencia nos resultadosChave', async () => {
-    mockPrisma.plano.findUnique.mockResolvedValue(null)
+    mockPrisma.plano.findFirst.mockResolvedValue(null)
 
-    await getPlanoWithObjetivos('plan1')
+    await getPlanoWithObjetivos('plan1', 'cliente-123')
 
-    const call = mockPrisma.plano.findUnique.mock.calls[0][0]
+    const call = mockPrisma.plano.findFirst.mock.calls[0][0]
     const krInclude = call.include.objetivos.include.resultadosChave.include
     expect(krInclude.linhaTendencia).toBeDefined()
   })
 
   it('ordena objetivos por numero ascendente', async () => {
-    mockPrisma.plano.findUnique.mockResolvedValue(null)
+    mockPrisma.plano.findFirst.mockResolvedValue(null)
 
-    await getPlanoWithObjetivos('plan1')
+    await getPlanoWithObjetivos('plan1', 'cliente-123')
 
-    const call = mockPrisma.plano.findUnique.mock.calls[0][0]
+    const call = mockPrisma.plano.findFirst.mock.calls[0][0]
     expect(call.include.objetivos.orderBy).toEqual({ numero: 'asc' })
   })
 
   it('inclui o planoPai (hierarquia) para o breadcrumb', async () => {
-    mockPrisma.plano.findUnique.mockResolvedValue(null)
+    mockPrisma.plano.findFirst.mockResolvedValue(null)
 
-    await getPlanoWithObjetivos('plan1')
+    await getPlanoWithObjetivos('plan1', 'cliente-123')
 
-    const call = mockPrisma.plano.findUnique.mock.calls[0][0]
+    const call = mockPrisma.plano.findFirst.mock.calls[0][0]
     expect(call.include.planoPai).toEqual({ select: { id: true, titulo: true } })
   })
 })

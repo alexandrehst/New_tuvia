@@ -184,6 +184,10 @@ Redesenha o funil de entrada: landing comercial (hero + prova, CTAs Entrar/Comec
 **FRs covered:** FR-6, FR-7, FR-8, FR-9
 **UX-DRs:** UX-DR15, UX-DR16 · **NFRs:** transversais
 
+### Epic 6: Contrato Comportamental & de Segurança
+**Adicionado pelo Sprint Change Proposal 2026-06-22.** Especifica e impõe os contratos que o redesenho (Epics 1–5) deliberadamente deixou fora de escopo: máquina de estado, autorização a nível de objeto e identidade. Fecha a classe de erro "spec sem contrato" exposta pela auditoria de segurança. Brownfield; reutiliza os guards existentes (`requireUser`/`requireAdmin`/`assertMesmoTenant`). Os bugs já corrigidos (IDOR cross-tenant; rotas `/api/ai/*` sem auth) entram como **critérios de aceitação de regressão permanentes**.
+**Escopo:** MAJOR (impacto em PRD §13, arquitetura — RLS/authz/estado — e UX — verificação/reset/onboarding).
+
 ---
 
 ## Critérios Transversais (herdados por toda story de UI)
@@ -450,7 +454,8 @@ So that eu controle quem acessa e como é notificado.
 **Then** vejo a lista de membros do cliente com seus papéis (`PapelPlano`) por plano (FR-29)
 **And** posso editar o papel inline e a preferência de notificação, com feedback de sucesso (FR-29/FR-30)
 **And** estados vazio/carregando são desenhados (FR-30/UX-DR17)
-**And** posso remover um usuário de um plano com confirmação.
+**And** posso remover um usuário de um plano com confirmação
+**And** a edição de papel/notificação é **imposta no backend** por papel (não apenas ocultada na UI) — ver Epic 6.5.
 
 ### Story 4.2: Convidar membro
 
@@ -512,5 +517,99 @@ So that eu comece a usar o produto.
 **Given** `/cadastro`
 **When** preencho e submeto
 **Then** a tela segue o mesmo padrão de cartão centrado e estados de FR-8/FR-9
-**And** ao criar a conta, o e-mail de boas-vindas (Brevo) é disparado como hoje (não-fatal) e sou levado ao app
+**And** ao criar a conta, o e-mail de boas-vindas (Brevo) é disparado (não-fatal) e, com verificação exigida, **vejo o estado "verifique seu email" — não sou autenticado até confirmar** (ver Epic 6.1)
 **And** os mesmos componentes de formulário das outras telas de auth são reutilizados (FR-9).
+
+> **Correção de curso (2026-06-22, Sprint Change Proposal):** o AC original ("sou levado ao app") codificava o comportamento inseguro de cadastro = login imediato sem verificação. Alinhado ao Contrato Comportamental (Epic 6).
+
+---
+
+## Epic 6: Contrato Comportamental & de Segurança
+
+Adicionado pelo `sprint-change-proposal-2026-06-22.md`. Impõe os contratos ausentes no redesenho. Ordem sugerida: 6.2/6.1 (fecham bugs vivos) → 6.5/6.6 (isolamento/authz) → 6.4 (estado) → 6.3 (onboarding, depende de 6.1). Recomenda-se solution-design (`bmad-create-architecture`) para 6.4/6.5/6.6 antes das stories.
+
+**Critérios de aceitação de regressão (herdados por todo o epic):**
+- **Given** qualquer query/action de domínio, **Then** nenhum recurso de outro `clienteId` é retornado/mutado (trava o IDOR já corrigido).
+- **Given** qualquer rota `/api/ai/*`, **Then** exige autenticação (401 se anônimo) e valida o input com Zod (400 se inválido).
+
+### Story 6.1: Contrato de auth & sessão
+
+As a responsável pela segurança do produto,
+I want uma matriz de acesso por estado de autenticação e uma política de verificação de e-mail explícita,
+So that ninguém acesse a app sem identidade verificada e os estados de sessão sejam previsíveis.
+
+**Acceptance Criteria:**
+
+**Given** um usuário autenticado em rota pública (`/login`, `/cadastro`, `/reset-senha`)
+**Then** é redirecionado para a app (já implementado em `(auth)/layout.tsx`)
+**And** qualquer rota `(app)/*` exige sessão válida (`getUser()`), redirecionando ao login se ausente
+**And** o cadastro com verificação exigida **não cria sessão** — mostra "verifique seu email" (já implementado em `signUp`)
+**And** "Confirm email" está ligado no Supabase Auth e o comportamento está documentado.
+
+### Story 6.2: Redefinição de senha (`/nova-senha`)
+
+As a usuário que esqueceu a senha,
+I want uma página para definir uma nova senha a partir do link do e-mail,
+So that eu recupere o acesso à minha conta.
+
+**Acceptance Criteria:**
+
+**Given** o e-mail de recovery (`resetPassword` aponta para `/nova-senha`)
+**When** abro o link e defino uma nova senha
+**Then** a página `/nova-senha` recebe a sessão de recovery e persiste a nova senha
+**And** os 3 estados (carregando/erro/sucesso) seguem o padrão das telas de auth (FR-9)
+**And** após sucesso sou levado ao login/app conforme a política de sessão.
+
+### Story 6.3: Onboarding / bootstrap de tenant
+
+As a novo usuário recém-verificado,
+I want ser conduzido à criação do meu primeiro plano,
+So that eu não caia numa app vazia sem direção.
+
+**Acceptance Criteria:**
+
+**Given** o primeiro acesso pós-verificação (sem planos no `Cliente`)
+**Then** há contexto de `Cliente` garantido e um caminho guiado ao wizard (liga ao Epic 3), não um `/planos` vazio mudo
+**And** o estado vazio existente (FR-12) é o ponto de entrada do onboarding.
+
+### Story 6.4: Ciclo de vida do Plano
+
+As a gestor de plano,
+I want que o plano tenha estados com regras claras de edição,
+So that "Atualizar" e "Editar" deixem de ser confusos.
+
+**Acceptance Criteria:**
+
+**Given** `StatusPlano {edicao, publicado, arquivado}`
+**When** o plano está em `edicao`
+**Then** edição estrutural (objetivos/KRs/datas) é permitida
+**And** quando `publicado`, só **atualização de valores** de KR é permitida (edição estrutural bloqueada, com motivo visível na UI)
+**And** as transições `edicao→publicado→arquivado` existem e são impostas no backend
+**And** a UI reflete o estado e o que está bloqueado.
+
+### Story 6.5: Enforcement de papel por plano
+
+As a administrador,
+I want que os papéis por plano sejam impostos no backend,
+So that ocultar um botão não seja a única barreira.
+
+**Acceptance Criteria:**
+
+**Given** `PapelPlano {owner, editor, viewer}` (EXPERIENCE.md: papéis controlam o que se edita)
+**When** um `viewer` tenta mutar (mesmo chamando a action diretamente)
+**Then** a mutação é negada por uma checagem de autorização reutilizável (análoga a `assertMesmoTenant`)
+**And** `editor`/`owner` têm as permissões correspondentes
+**And** a UI continua ocultando o que o papel não permite (UX-DR17), agora respaldada pelo backend.
+
+### Story 6.6: RLS no Postgres (defesa em profundidade)
+
+As a responsável pela isolação multi-tenant,
+I want políticas RLS por `clienteId` no Postgres,
+So that o isolamento não dependa de lembrar o guard na aplicação.
+
+**Acceptance Criteria:**
+
+**Given** as tabelas com `clienteId`
+**Then** há políticas RLS que restringem linhas ao tenant do usuário autenticado
+**And** o acesso via cliente anon do Supabase respeita as políticas
+**And** o isolamento de aplicação (guards) e o de banco (RLS) são redundantes por desenho.

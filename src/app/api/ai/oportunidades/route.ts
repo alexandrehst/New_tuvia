@@ -2,9 +2,16 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
 import { openai, MODELO_PADRAO } from '@/lib/openai'
+import { requireApiUser, unauthorizedResponse } from '@/features/auth/api-guard'
+import { oportunidadesSchema } from '@/features/ai/schemas'
 
 export async function POST(request: NextRequest) {
-  const { ramo, descricaoNegocio } = await request.json()
+  const user = await requireApiUser()
+  if (!user) return unauthorizedResponse()
+
+  const parsed = oportunidadesSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return new Response('Invalid input', { status: 400 })
+  const { ramo, descricaoNegocio } = parsed.data
 
   const stream = await openai.chat.completions.create({
     model: MODELO_PADRAO,

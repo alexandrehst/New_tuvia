@@ -103,10 +103,16 @@ export function ObjetivosBoard({
   objetivos,
   planoId,
   usuarios,
+  podeEditar = true,
+  podeAtualizarValor = true,
 }: {
   objetivos: Objetivo[]
   planoId: string
   usuarios: ObjetivoUsuario[]
+  /** Edição estrutural (criar/editar/excluir objetivo e KR) — só em "Em planejamento". */
+  podeEditar?: boolean
+  /** Atualizar valor de KR — em "Em planejamento" e "Ativo", não em "Arquivado". */
+  podeAtualizarValor?: boolean
 }) {
   const [openKR, setOpenKR] = useState<KRPanelData | null>(null)
   const [overrides, setOverrides] = useState<Record<string, KROverride>>({})
@@ -131,17 +137,21 @@ export function ObjetivosBoard({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Objetivos ({objetivos.length})
         </h2>
-        <Button size="sm" className="gap-1.5" onClick={() => setObjetivoSheet({ mode: "criar" })}>
-          <Plus className="size-4" /> Novo objetivo
-        </Button>
+        {podeEditar && (
+          <Button size="sm" className="gap-1.5" onClick={() => setObjetivoSheet({ mode: "criar" })}>
+            <Plus className="size-4" /> Novo objetivo
+          </Button>
+        )}
       </div>
 
       {objetivos.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-border bg-card py-16 text-center">
           <p className="text-sm text-muted-foreground">Nenhum objetivo ainda.</p>
-          <Button size="sm" onClick={() => setObjetivoSheet({ mode: "criar" })}>
-            Criar primeiro objetivo
-          </Button>
+          {podeEditar && (
+            <Button size="sm" onClick={() => setObjetivoSheet({ mode: "criar" })}>
+              Criar primeiro objetivo
+            </Button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-4 overflow-x-auto pb-2 lg:flex-row lg:items-start">
@@ -179,33 +189,37 @@ export function ObjetivosBoard({
                         )}
                       </div>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Editar objetivo"
-                      onClick={() =>
-                        setObjetivoSheet({
-                          mode: "editar",
-                          initial: {
-                            id: objetivo.id,
-                            titulo: objetivo.titulo,
-                            descricao: objetivo.descricao,
-                            numero: objetivo.numero,
-                            responsaveisIds: (objetivo.responsaveis ?? []).map((r) => r.user.id),
-                          },
-                        })
-                      }
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Excluir objetivo"
-                      onClick={() => setConfirm({ tipo: "objetivo", id: objetivo.id, titulo: objetivo.titulo })}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    {podeEditar && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Editar objetivo"
+                          onClick={() =>
+                            setObjetivoSheet({
+                              mode: "editar",
+                              initial: {
+                                id: objetivo.id,
+                                titulo: objetivo.titulo,
+                                descricao: objetivo.descricao,
+                                numero: objetivo.numero,
+                                responsaveisIds: (objetivo.responsaveis ?? []).map((r) => r.user.id),
+                              },
+                            })
+                          }
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Excluir objetivo"
+                          onClick={() => setConfirm({ tipo: "objetivo", id: objetivo.id, titulo: objetivo.titulo })}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </header>
@@ -214,34 +228,45 @@ export function ObjetivosBoard({
                 <KRCard
                   key={kr.id}
                   kr={display(kr)}
-                  onAtualizar={() => setOpenKR(toPanelData(display(kr)))}
-                  onEditar={() =>
-                    setKrSheet({
-                      mode: "editar",
-                      initial: {
-                        id: kr.id,
-                        descricao: kr.descricao,
-                        tipoMetrica: kr.tipoMetrica,
-                        valorInicial: kr.valorInicial,
-                        valorAlvo: kr.valorAlvo,
-                        unidade: kr.unidade,
-                        peso: kr.peso,
-                      },
-                    })
+                  onAtualizar={
+                    podeAtualizarValor ? () => setOpenKR(toPanelData(display(kr))) : undefined
                   }
-                  onExcluir={() => setConfirm({ tipo: "kr", id: kr.id, descricao: kr.descricao })}
+                  onEditar={
+                    podeEditar
+                      ? () =>
+                          setKrSheet({
+                            mode: "editar",
+                            initial: {
+                              id: kr.id,
+                              descricao: kr.descricao,
+                              tipoMetrica: kr.tipoMetrica,
+                              valorInicial: kr.valorInicial,
+                              valorAlvo: kr.valorAlvo,
+                              unidade: kr.unidade,
+                              peso: kr.peso,
+                            },
+                          })
+                      : undefined
+                  }
+                  onExcluir={
+                    podeEditar
+                      ? () => setConfirm({ tipo: "kr", id: kr.id, descricao: kr.descricao })
+                      : undefined
+                  }
                   onHistorico={() => setHistorico({ krId: kr.id, descricao: kr.descricao })}
                 />
               ))}
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start gap-1.5 border-dashed text-muted-foreground"
-                onClick={() => setKrSheet({ mode: "criar", objetivoId: objetivo.id })}
-              >
-                <Plus className="size-3.5" /> Adicionar KR
-              </Button>
+              {podeEditar && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start gap-1.5 border-dashed text-muted-foreground"
+                  onClick={() => setKrSheet({ mode: "criar", objetivoId: objetivo.id })}
+                >
+                  <Plus className="size-3.5" /> Adicionar KR
+                </Button>
+              )}
             </section>
           ))}
         </div>

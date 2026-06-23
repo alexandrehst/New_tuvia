@@ -4,8 +4,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { PlanoEditButton } from '@/features/plano/components/PlanoEditButton'
 import { PlanoApoioButton } from '@/features/plano/components/PlanoApoioButton'
+import { PlanoLifecycleControls } from '@/features/plano/components/PlanoLifecycleControls'
+import { podeEditarEstrutura, podeAtualizarValor, type StatusPlano } from '@/features/plano/lib/status'
 import { getPlanoWithObjetivos } from '@/features/plano/queries'
 import { getClienteUsuarios } from '@/features/usuarios/queries'
+import { getCurrentUser } from '@/features/auth/guards'
 import { ObjetivosBoard } from '@/features/plano/components/ObjetivosBoard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -53,11 +56,15 @@ function calcTimeElapsed(dataInicio: Date, dataFim: Date): number {
 
 export default async function PlanoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const plano = await getPlanoWithObjetivos(id)
+  const user = await getCurrentUser()
+  if (!user) notFound()
+
+  const plano = await getPlanoWithObjetivos(id, user.clienteId)
   if (!plano) notFound()
 
   const objetivos = plano.objetivos ?? []
-  const usuarios = await getClienteUsuarios(plano.clienteId)
+  const podeEdicao = podeEditarEstrutura(plano.status)
+  const usuarios = await getClienteUsuarios(user.clienteId)
   const todosKRs = objetivos.flatMap(o => o.resultadosChave)
   const totalKRs = todosKRs.length
   const completedKRs = todosKRs.filter(kr => kr.progresso >= 100).length
@@ -105,22 +112,26 @@ export default async function PlanoDetailPage({ params }: { params: Promise<{ id
           <h1 className="text-2xl font-bold text-foreground">{plano.titulo}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {plano.tipo === 'corporativo' && (
+          <PlanoLifecycleControls planoId={plano.id} status={plano.status as StatusPlano} />
+          {/* Edição estrutural (apoio/metadados) só faz sentido em "Em planejamento". */}
+          {podeEdicao && plano.tipo === 'corporativo' && (
             <PlanoApoioButton
               planoPaiId={plano.id}
               dataInicio={plano.dataInicio}
               dataFim={plano.dataFim}
             />
           )}
-          <PlanoEditButton
-            plano={{
-              id: plano.id,
-              titulo: plano.titulo,
-              dataInicio: plano.dataInicio,
-              dataFim: plano.dataFim,
-              frequenciaAtualizacao: plano.frequenciaAtualizacao,
-            }}
-          />
+          {podeEdicao && (
+            <PlanoEditButton
+              plano={{
+                id: plano.id,
+                titulo: plano.titulo,
+                dataInicio: plano.dataInicio,
+                dataFim: plano.dataFim,
+                frequenciaAtualizacao: plano.frequenciaAtualizacao,
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -187,8 +198,23 @@ export default async function PlanoDetailPage({ params }: { params: Promise<{ id
         </CardContent>
       </Card>
 
+      {/* Aviso de estado: edição estrutural só em "Em planejamento". */}
+      {!podeEdicao && (
+        <div role="status" className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          {plano.status === 'arquivado'
+            ? 'Plano arquivado — somente leitura.'
+            : 'Plano ativo — você pode atualizar os valores dos resultados-chave. Para editar a estrutura (objetivos, KRs, datas), use “Editar” para reabrir o plano.'}
+        </div>
+      )}
+
       {/* Objectives section */}
-      <ObjetivosBoard objetivos={objetivos} planoId={plano.id} usuarios={usuarios} />
+      <ObjetivosBoard
+        objetivos={objetivos}
+        planoId={plano.id}
+        usuarios={usuarios}
+        podeEditar={podeEdicao}
+        podeAtualizarValor={podeAtualizarValor(plano.status)}
+      />
     </div>
   )
 }

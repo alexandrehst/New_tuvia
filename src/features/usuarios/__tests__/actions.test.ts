@@ -13,15 +13,18 @@ vi.mock('@/lib/brevo', () => ({
 }))
 
 vi.mock('@/features/auth/guards', () => ({
+  requireUser: vi.fn(async () => ({ id: 'u-1', clienteId: 'cliente-1', tipoUser: 'admin' })),
   requireAdmin: vi.fn(async () => ({ id: 'admin-1', clienteId: 'cliente-1', tipoUser: 'admin' })),
   assertMesmoTenant: (recurso: string | null | undefined, usuario: string) => {
     if (recurso !== usuario) throw new Error('Recurso não encontrado')
   },
+  // updatePapel/removerMembroDoPlano usam o contrato (gerirPlano = owner); testado em guards.test.ts.
+  assertPodeMutarPlano: vi.fn(async () => ({ clienteId: 'cliente-1', status: 'edicao' })),
 }))
 
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/brevo'
-import { requireAdmin } from '@/features/auth/guards'
+import { requireAdmin, assertPodeMutarPlano } from '@/features/auth/guards'
 import { updatePapel, updateNotificacao, removerMembroDoPlano, inviteUser } from '../actions'
 
 const mockSendEmail = sendEmail as unknown as ReturnType<typeof vi.fn>
@@ -36,8 +39,8 @@ beforeEach(() => {
 })
 
 describe('updatePapel', () => {
-  it('atualiza o papel do vínculo do mesmo tenant', async () => {
-    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ plano: { clienteId: 'cliente-1' } })
+  it('atualiza o papel do vínculo (autorizado pelo contrato)', async () => {
+    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ planoId: 'p-1' })
     mockPrisma.planoUsuario.update.mockResolvedValue({})
 
     await updatePapel('pu-1', 'editor')
@@ -46,6 +49,8 @@ describe('updatePapel', () => {
       where: { id: 'pu-1' },
       data: { papel: 'editor' },
     })
+    // Gerir papel = operação 'gerirPlano' (owner) sobre o plano do vínculo.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('p-1', expect.anything(), 'gerirPlano')
   })
 
   it('rejeita papel inválido', async () => {
@@ -53,14 +58,15 @@ describe('updatePapel', () => {
     await expect(updatePapel('pu-1', 'superadmin')).rejects.toThrow()
   })
 
-  it('bloqueia vínculo de outro tenant (sem atualizar)', async () => {
-    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ plano: { clienteId: 'cliente-2' } })
+  it('lança quando o vínculo não existe', async () => {
+    mockPrisma.planoUsuario.findUnique.mockResolvedValue(null)
     await expect(updatePapel('pu-1', 'editor')).rejects.toThrow()
     expect(mockPrisma.planoUsuario.update).not.toHaveBeenCalled()
   })
 
-  it('bloqueia não-admin', async () => {
-    mockRequireAdmin.mockRejectedValue(new Error('Acesso negado'))
+  it('bloqueia quem não pode gerir o plano (guard nega)', async () => {
+    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ planoId: 'p-1' })
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Acesso negado'))
     await expect(updatePapel('pu-1', 'editor')).rejects.toThrow()
     expect(mockPrisma.planoUsuario.update).not.toHaveBeenCalled()
   })
@@ -108,8 +114,8 @@ describe('updateNotificacao', () => {
 })
 
 describe('removerMembroDoPlano', () => {
-  it('deleta o vínculo do mesmo tenant', async () => {
-    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ plano: { clienteId: 'cliente-1' } })
+  it('deleta o vínculo (autorizado pelo contrato)', async () => {
+    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ planoId: 'p-9' })
     mockPrisma.planoUsuario.delete.mockResolvedValue({})
 
     await removerMembroDoPlano('pu-9')
@@ -117,8 +123,9 @@ describe('removerMembroDoPlano', () => {
     expect(mockPrisma.planoUsuario.delete).toHaveBeenCalledWith({ where: { id: 'pu-9' } })
   })
 
-  it('bloqueia vínculo de outro tenant (sem deletar)', async () => {
-    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ plano: { clienteId: 'cliente-2' } })
+  it('bloqueia quem não pode gerir o plano (guard nega)', async () => {
+    mockPrisma.planoUsuario.findUnique.mockResolvedValue({ planoId: 'p-9' })
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Acesso negado'))
     await expect(removerMembroDoPlano('pu-9')).rejects.toThrow()
     expect(mockPrisma.planoUsuario.delete).not.toHaveBeenCalled()
   })

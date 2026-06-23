@@ -37,9 +37,9 @@ export async function getPlanos(clienteId: string) {
   })
 }
 
-export async function getPlanoWithObjetivos(planoId: string) {
-  return prisma.plano.findUnique({
-    where: { id: planoId },
+export async function getPlanoWithObjetivos(planoId: string, clienteId: string) {
+  return prisma.plano.findFirst({
+    where: { id: planoId, clienteId },
     include: {
       planoPai: { select: { id: true, titulo: true } },
       objetivos: {

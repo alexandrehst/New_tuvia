@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { sendEmail, TEMPLATES } from '@/lib/brevo'
 import { gerarLinhaTendencia, calcularProgresso, calcularRisco, calcularProgressoObjetivo } from './lib/calculos'
-import { requireUser, assertMesmoTenant } from '@/features/auth/guards'
+import { requireUser, assertMesmoTenant, assertPodeMutarPlano } from '@/features/auth/guards'
 import { updateKeyResultValorSchema, createKeyResultSchema, updateKeyResultSchema, type UpdateKeyResultValorInput, type CreateKeyResultInput, type UpdateKeyResultInput } from './schemas'
 
 export async function updateKeyResultValor(data: UpdateKeyResultValorInput) {
@@ -25,7 +25,8 @@ export async function updateKeyResultValor(data: UpdateKeyResultValorInput) {
   const plano = kr.objetivo.plano
 
   const user = await requireUser()
-  assertMesmoTenant(plano.clienteId, user.clienteId)
+  // Atualizar valor de KR: editor; permitido em `edicao` e `publicado` (não arquivado).
+  await assertPodeMutarPlano(plano.id, user, 'updateKeyResultValor')
 
   // 2. Calculate progress and risk
   const progresso = calcularProgresso(
@@ -111,7 +112,8 @@ export async function createKeyResult(data: CreateKeyResultInput) {
   })
 
   const user = await requireUser()
-  assertMesmoTenant(objetivo.plano.clienteId, user.clienteId)
+  // Criar KR = edição estrutural (editor + somente `edicao`).
+  await assertPodeMutarPlano(objetivo.plano.id, user, 'editarEstrutura')
 
   const kr = await prisma.resultadoChave.create({
     data: {
@@ -175,10 +177,11 @@ export async function getKRHistorico(krId: string) {
 export async function deleteKeyResult(id: string) {
   const kr = await prisma.resultadoChave.findUniqueOrThrow({
     where: { id },
-    select: { objetivo: { select: { plano: { select: { clienteId: true } } } } },
+    select: { objetivo: { select: { planoId: true } } },
   })
   const user = await requireUser()
-  assertMesmoTenant(kr.objetivo.plano.clienteId, user.clienteId)
+  // Excluir KR = edição estrutural (editor + somente `edicao`).
+  await assertPodeMutarPlano(kr.objetivo.planoId, user, 'editarEstrutura')
 
   // Cascata do schema remove HistoricoValores e LinhaTendencia
   await prisma.resultadoChave.delete({ where: { id } })
@@ -201,7 +204,8 @@ export async function updateKeyResult(id: string, data: UpdateKeyResultInput) {
   const plano = kr.objetivo.plano
 
   const user = await requireUser()
-  assertMesmoTenant(plano.clienteId, user.clienteId)
+  // Editar KR = edição estrutural (editor + somente `edicao`).
+  await assertPodeMutarPlano(plano.id, user, 'editarEstrutura')
 
   // Base mesclada (campo enviado ou valor atual) — afeta progresso/risco/tendência
   const tipoMetrica = (parsed.tipoMetrica ?? kr.tipoMetrica) as 'aumentar' | 'reduzir' | 'simNao'

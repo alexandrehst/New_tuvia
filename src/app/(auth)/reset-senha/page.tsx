@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState } from 'react'
+import { Suspense, useActionState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { resetPassword } from '@/features/auth/actions'
 import { Button } from '@/components/ui/button'
@@ -10,7 +11,19 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function ResetSenhaPage() {
+  // useSearchParams exige um limite de Suspense para não de-optar a rota.
+  return (
+    <Suspense fallback={null}>
+      <ResetSenhaForm />
+    </Suspense>
+  )
+}
+
+function ResetSenhaForm() {
   const [state, action, isPending] = useActionState(resetPassword, null)
+  // Link de recuperação inválido/expirado redireciona para cá com ?erro=link-invalido
+  // (ver src/app/auth/confirm/route.ts).
+  const linkInvalido = useSearchParams().get('erro') === 'link-invalido'
 
   return (
     <Card className="w-full">
@@ -19,6 +32,12 @@ export default function ResetSenhaPage() {
           <CardDescription>Enviaremos um link para o seu email</CardDescription>
         </CardHeader>
         <CardContent>
+          {linkInvalido && !state?.success && (
+            <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              O link de recuperação é inválido ou expirou. Solicite um novo abaixo.
+            </div>
+          )}
           {state?.success ? (
             <div className="flex items-center gap-2 rounded-lg border border-status-no-prazo/20 bg-status-no-prazo-bg px-4 py-3 text-sm text-status-no-prazo">
               <CheckCircle2 className="size-4 shrink-0" />

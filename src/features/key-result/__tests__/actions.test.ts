@@ -37,14 +37,18 @@ vi.mock('@/lib/brevo', () => ({
 }))
 
 vi.mock('@/features/auth/guards', () => ({
-  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1' })),
+  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1', tipoUser: 'admin' })),
+  // getKRHistorico (leitura) ainda usa assertMesmoTenant; as mutações usam o contrato unificado.
   assertMesmoTenant: (recurso: string | null | undefined, usuario: string) => {
     if (recurso !== usuario) throw new Error('Recurso não encontrado')
   },
+  // Autorização (tenant→papel→estado) testada em guards.test.ts; aqui no-op por padrão.
+  assertPodeMutarPlano: vi.fn(async () => ({ clienteId: 'cliente-1', status: 'edicao' })),
 }))
 
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/brevo'
+import { assertPodeMutarPlano } from '@/features/auth/guards'
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 
@@ -62,6 +66,7 @@ const makeKr = (overrides = {}) => ({
   objetivo: {
     id: validCuid2,
     plano: {
+      id: 'plano-1',
       clienteId: 'cliente-1',
       dataInicio: new Date('2025-01-01'),
       dataFim: new Date('2025-12-31'),
@@ -89,6 +94,8 @@ describe('updateKeyResultValor', () => {
         data: expect.objectContaining({ valorAtual: 50, progresso: 50 }),
       })
     )
+    // Operação 'updateKeyResultValor' (permite estado publicado) — não 'editarEstrutura'.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('plano-1', expect.anything(), 'updateKeyResultValor')
   })
 
   it('registra histórico de valores', async () => {
@@ -230,6 +237,7 @@ describe('createKeyResult', () => {
   const fakeObjetivo = {
     id: validCuid,
     plano: {
+      id: 'plano-1',
       clienteId: 'cliente-1',
       dataInicio: new Date('2025-01-01'),
       dataFim: new Date('2025-12-31'),
@@ -249,6 +257,8 @@ describe('createKeyResult', () => {
         data: expect.objectContaining({ valorAtual: 0 }),
       })
     )
+    // Criar KR = edição estrutural.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('plano-1', expect.anything(), 'editarEstrutura')
   })
 
   it('gera linha de tendência quando plano tem datas', async () => {
@@ -353,8 +363,9 @@ describe('deleteKeyResult', () => {
     expect(mockPrisma.resultadoChave.delete).toHaveBeenCalledWith({ where: { id: validCuid } })
   })
 
-  it('bloqueia exclusão de outro tenant', async () => {
-    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue({ objetivo: { plano: { clienteId: 'cliente-2' } } })
+  it('bloqueia exclusão quando o guard nega (tenant/papel/estado)', async () => {
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue({ objetivo: { planoId: validCuid2 } })
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Acesso negado'))
     await expect(deleteKeyResult(validCuid)).rejects.toThrow()
     expect(mockPrisma.resultadoChave.delete).not.toHaveBeenCalled()
   })

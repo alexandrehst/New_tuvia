@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { getCurrentUser } from '@/features/auth/guards'
 import { getPlanos } from '@/features/plano/queries'
+import { isPrimeiroAcesso } from '@/features/onboarding/queries'
+import { OnboardingVazio } from '@/features/onboarding/components/OnboardingVazio'
 import { PlanoCard } from '@/features/plano/components/PlanoCard'
 import { Button } from '@/components/ui/button'
 
@@ -13,6 +15,7 @@ export default async function PlanosPage() {
   if (!user) redirect('/login')
 
   const planos = await getPlanos(user.clienteId)
+  const primeiroAcesso = planos.length === 0 && (await isPrimeiroAcesso(user.clienteId))
   const nome = user.nome.split(' ')[0]
 
   return (
@@ -33,18 +36,22 @@ export default async function PlanosPage() {
       </div>
 
       {planos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-32 text-center gap-4">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-            <Plus className="size-8 text-primary" />
+        primeiroAcesso ? (
+          <OnboardingVazio nome={nome} />
+        ) : (
+          <div className="flex flex-col items-center justify-center py-32 text-center gap-4">
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+              <Plus className="size-8 text-primary" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-foreground mb-1">Nenhum plano ainda</p>
+              <p className="text-sm text-muted-foreground">Crie o primeiro plano estratégico</p>
+            </div>
+            <Button render={<Link href="/criador" />}>
+              Criar primeiro plano
+            </Button>
           </div>
-          <div>
-            <p className="text-lg font-semibold text-foreground mb-1">Nenhum plano ainda</p>
-            <p className="text-sm text-muted-foreground">Crie o primeiro plano estratégico</p>
-          </div>
-          <Button render={<Link href="/criador" />}>
-            Criar primeiro plano
-          </Button>
-        </div>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {planos.map((plano) => (

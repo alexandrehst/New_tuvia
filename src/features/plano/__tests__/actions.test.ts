@@ -23,14 +23,18 @@ vi.mock('@/lib/openai', () => ({
 }))
 
 vi.mock('@/features/auth/guards', () => ({
-  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1' })),
+  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1', tipoUser: 'admin' })),
   assertMesmoTenant: (recurso: string | null | undefined, usuario: string) => {
     if (recurso !== usuario) throw new Error('Recurso não encontrado')
   },
+  assertPodeMutarPlano: vi.fn(async () => {}),
+  assertPapelPlano: vi.fn(async () => {}),
+  resolverPapelPlano: vi.fn(async () => 'owner'),
 }))
 
 import { prisma } from '@/lib/prisma'
 import { openai } from '@/lib/openai'
+import { assertPodeMutarPlano } from '@/features/auth/guards'
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 const mockOpenAI = openai as unknown as { chat: { completions: { create: ReturnType<typeof vi.fn> } } }
@@ -286,6 +290,8 @@ describe('updatePlano', () => {
     )
     expect(mockPrisma.resultadoChave.findMany).not.toHaveBeenCalled()
     expect(mockPrisma.linhaTendencia.deleteMany).not.toHaveBeenCalled()
+    // Editar plano = operação 'editarEstrutura' (só em "Em planejamento").
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('plano-1', expect.anything(), 'editarEstrutura')
   })
 
   it('recomputa status e regenera tendência de todos os KRs quando as datas mudam', async () => {
@@ -332,6 +338,8 @@ describe('createPlanoDepartamento', () => {
     const result = await createPlanoDepartamento(valido)
 
     expect(result).toEqual({ planoId: 'apoio-1' })
+    // Criar plano de apoio exige 'gerirPlano' (owner) sobre o plano-pai.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith(paiCuid, expect.anything(), 'gerirPlano')
     expect(mockPrisma.plano.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -354,7 +362,9 @@ describe('createPlanoDepartamento', () => {
   })
 
   it('bloqueia plano-pai de outro tenant', async () => {
-    mockPrisma.plano.findUniqueOrThrow.mockResolvedValue({ clienteId: 'cliente-2' })
+    // O isolamento (tenant→papel→estado) é imposto por assertPodeMutarPlano (testado em guards.test.ts);
+    // aqui verificamos que createPlanoDepartamento propaga a rejeição do guard e não cria nada.
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Recurso não encontrado'))
     await expect(createPlanoDepartamento(valido)).rejects.toThrow()
     expect(mockPrisma.plano.create).not.toHaveBeenCalled()
   })

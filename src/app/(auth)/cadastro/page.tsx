@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import Link from 'next/link'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, MailCheck } from 'lucide-react'
 import { signUp } from '@/features/auth/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,19 @@ export default function CadastroPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {state?.success ? (
+          <div role="status" className="flex flex-col items-center gap-3 py-4 text-center">
+            <MailCheck className="size-10 text-primary" />
+            <p className="text-sm text-muted-foreground">
+              Conta criada! Enviamos um link de confirmação para o seu email.
+              Confirme para entrar.
+            </p>
+            <Link href="/login" className="text-sm text-primary hover:underline">
+              Voltar para o login
+            </Link>
+          </div>
+        ) : (
+        <>
         {state?.error && (
           <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="size-4 shrink-0" />
@@ -49,6 +62,8 @@ export default function CadastroPage() {
             {isPending ? 'Criando…' : 'Criar conta'}
           </Button>
         </form>
+        </>
+        )}
       </CardContent>
     </Card>
   )

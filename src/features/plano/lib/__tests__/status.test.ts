@@ -3,8 +3,8 @@ import { planoStatusLabel, planoStatusBadgeClasses } from '../status'
 
 describe('planoStatusLabel', () => {
   it('retorna rótulos em pt-BR para cada status', () => {
-    expect(planoStatusLabel('edicao')).toBe('Edição')
-    expect(planoStatusLabel('publicado')).toBe('Publicado')
+    expect(planoStatusLabel('edicao')).toBe('Em planejamento')
+    expect(planoStatusLabel('publicado')).toBe('Ativo')
     expect(planoStatusLabel('arquivado')).toBe('Arquivado')
   })
 

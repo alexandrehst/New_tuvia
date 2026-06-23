@@ -62,7 +62,7 @@ _Regras críticas e padrões não-óbvios que agentes de IA DEVEM seguir ao impl
 
 ### Modelo de Domínio (regras que o schema não conta)
 
-- **Multi-tenant por `clienteId`** — toda query/mutação de dados deve ser escopada ao `Cliente`. RLS no Supabase reforça, mas o código também filtra.
+- **Multi-tenant por `clienteId`** — toda query/mutação de dados deve ser escopada ao `Cliente`. A **defesa primária é o código** (`assertMesmoTenant` + filtro `clienteId` no `where`): hoje a RLS do Postgres **não** cobre o caminho do Prisma, que conecta como role `postgres` (BYPASSRLS). A RLS (`prisma/sql/rls_tenant_isolation.sql`) é **rede secundária**, só efetiva sob conexão sujeita a RLS (supabase-js, ou Prisma sob role não-privilegiado — Opção B, follow-up). Nunca confie na RLS para escopar dados via Prisma.
 - **Hierarquia de planos**: plano corporativo tem `planoPaiId: null`; planos de apoio (departamento) apontam para o pai. Plano "raiz" do tenant = `planoPaiId: null`.
 - **`PlanoEstrategico` é auxiliar**, não pai na hierarquia — guarda os inputs do wizard (SWOT, missão, visão, valores) e vincula ao `Plano` gerado.
 - **Cálculos de KR centralizados** em `features/key-result/lib/calculos.ts` (`calculateProgress`, `calculateRisk`, `gerarLinhaTendencia`). Não reimplementar as fórmulas inline — ver `docs/architecture.md §4`.
