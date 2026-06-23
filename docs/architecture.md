@@ -274,6 +274,45 @@ transação — a **Opção B**, registrada como endurecimento futuro (story ded
 
 ---
 
+### 7.2 Contrato de auth & sessão
+
+> Decisão CB-1 do Epic 6 (Story 6.1). Ver PRD §13 e
+> `_bmad-output/planning-artifacts/architecture-epic6-seguranca.md`.
+
+Matriz de acesso por **estado de autenticação** — o que cada estado pode acessar:
+
+| Estado | Rotas públicas (`/login`, `/cadastro`, `/reset-senha`) + `(recovery)` | `(app)/*` (área logada) |
+|---|---|---|
+| **Anônimo** (sem sessão) | acessa normalmente | redireciona → `/login` |
+| **Autenticado-não-verificado** | *não existe como sessão* (ver nota) | não alcança — não há sessão |
+| **Autenticado** (verificado) | redireciona → `/planos` | acessa |
+
+**Onde cada regra é imposta:**
+- Rotas públicas: `src/app/(auth)/layout.tsx` — `async`, `getUser()` → `redirect('/planos')` se houver usuário.
+- Área logada: `src/app/(app)/layout.tsx` — `getUser()` → `redirect('/login')` se não houver sessão.
+- `getUser()` (não `getSession`) é o padrão — revalida o JWT no Auth server, não confia só no cookie.
+
+**Nota — por que o estado "não-verificado" é seguro por construção.** Com
+**"Confirm email" ligado** no Supabase, o `signUp` **não recebe sessão** até o
+e-mail ser confirmado: `src/features/auth/actions.ts` ramifica em `data.session`
+e, quando ausente, retorna `{ success: true }` (a tela `/cadastro` mostra
+"verifique seu email") **sem autenticar**. Logo o usuário não-verificado é
+efetivamente anônimo até confirmar — não existe sessão "logada porém não
+verificada" para vazar para `(app)/*`.
+
+**Política de verificação (config obrigatória).** "Confirm email" em
+Authentication → Sign In / Providers → Email **deve estar ligado**; sem isso o
+`signUp` recebe sessão e loga direto, quebrando a matriz acima. A URL
+`…/auth/confirm` deve estar na allowlist de Redirect URLs (pré-requisito do fluxo
+de recovery — Story 6.2).
+
+**Recovery.** A sessão de recovery (link de redefinição de senha) é uma sessão
+real; por isso `/nova-senha` vive no grupo `(recovery)` (sem o guard de `(auth)`).
+Não deve ser usada para navegar no app — ver follow-up de honestidade em
+`_bmad-output/implementation-artifacts/review-epic6.md`.
+
+---
+
 ## 8. Estrutura de Pastas
 
 ```
