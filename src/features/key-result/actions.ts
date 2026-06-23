@@ -3,7 +3,8 @@
 import { prisma } from '@/lib/prisma'
 import { sendEmail, TEMPLATES } from '@/lib/brevo'
 import { gerarLinhaTendencia, calcularProgresso, calcularRisco, calcularProgressoObjetivo } from './lib/calculos'
-import { updateKeyResultValorSchema, createKeyResultSchema, type UpdateKeyResultValorInput, type CreateKeyResultInput } from './schemas'
+import { requireUser, assertMesmoTenant, assertPodeMutarPlano } from '@/features/auth/guards'
+import { updateKeyResultValorSchema, createKeyResultSchema, updateKeyResultSchema, type UpdateKeyResultValorInput, type CreateKeyResultInput, type UpdateKeyResultInput } from './schemas'
 
 export async function updateKeyResultValor(data: UpdateKeyResultValorInput) {
   const parsed = updateKeyResultValorSchema.parse(data)
@@ -22,6 +23,10 @@ export async function updateKeyResultValor(data: UpdateKeyResultValorInput) {
   })
 
   const plano = kr.objetivo.plano
+
+  const user = await requireUser()
+  // Atualizar valor de KR: editor; permitido em `edicao` e `publicado` (não arquivado).
+  await assertPodeMutarPlano(plano.id, user, 'updateKeyResultValor')
 
   // 2. Calculate progress and risk
   const progresso = calcularProgresso(
@@ -106,6 +111,10 @@ export async function createKeyResult(data: CreateKeyResultInput) {
     include: { plano: true },
   })
 
+  const user = await requireUser()
+  // Criar KR = edição estrutural (editor + somente `edicao`).
+  await assertPodeMutarPlano(objetivo.plano.id, user, 'editarEstrutura')
+
   const kr = await prisma.resultadoChave.create({
     data: {
       objetivoId: parsed.objetivoId,
@@ -137,4 +146,120 @@ export async function createKeyResult(data: CreateKeyResultInput) {
   }
 
   return kr
+}
+
+export async function getKRHistorico(krId: string) {
+  const kr = await prisma.resultadoChave.findUniqueOrThrow({
+    where: { id: krId },
+    select: { objetivo: { select: { plano: { select: { clienteId: true } } } } },
+  })
+  const user = await requireUser()
+  assertMesmoTenant(kr.objetivo.plano.clienteId, user.clienteId)
+
+  const [historico, tendencia] = await Promise.all([
+    prisma.historicoValores.findMany({
+      where: { resultadoChaveId: krId },
+      orderBy: { dataRegistro: 'asc' },
+      select: { dataRegistro: true, valor: true },
+    }),
+    prisma.linhaTendencia.findMany({
+      where: { resultadoChaveId: krId },
+      orderBy: { data: 'asc' },
+      select: { data: true, valor: true },
+    }),
+  ])
+  return {
+    historico: historico.map((h) => ({ data: h.dataRegistro, valor: h.valor })),
+    tendencia: tendencia.map((t) => ({ data: t.data, valor: t.valor })),
+  }
+}
+
+export async function deleteKeyResult(id: string) {
+  const kr = await prisma.resultadoChave.findUniqueOrThrow({
+    where: { id },
+    select: { objetivo: { select: { planoId: true } } },
+  })
+  const user = await requireUser()
+  // Excluir KR = edição estrutural (editor + somente `edicao`).
+  await assertPodeMutarPlano(kr.objetivo.planoId, user, 'editarEstrutura')
+
+  // Cascata do schema remove HistoricoValores e LinhaTendencia
+  await prisma.resultadoChave.delete({ where: { id } })
+}
+
+export async function updateKeyResult(id: string, data: UpdateKeyResultInput) {
+  const parsed = updateKeyResultSchema.parse(data)
+
+  const kr = await prisma.resultadoChave.findUniqueOrThrow({
+    where: { id },
+    include: {
+      objetivo: {
+        include: {
+          plano: true,
+          resultadosChave: { select: { id: true, progresso: true, peso: true } },
+        },
+      },
+    },
+  })
+  const plano = kr.objetivo.plano
+
+  const user = await requireUser()
+  // Editar KR = edição estrutural (editor + somente `edicao`).
+  await assertPodeMutarPlano(plano.id, user, 'editarEstrutura')
+
+  // Base mesclada (campo enviado ou valor atual) — afeta progresso/risco/tendência
+  const tipoMetrica = (parsed.tipoMetrica ?? kr.tipoMetrica) as 'aumentar' | 'reduzir' | 'simNao'
+  const valorInicial = parsed.valorInicial ?? kr.valorInicial
+  const valorAlvo = parsed.valorAlvo ?? kr.valorAlvo
+  const peso = parsed.peso ?? kr.peso
+
+  // Recalcula sobre o valorAtual existente (atualizar VALOR é a Story 2.3)
+  const progresso = calcularProgresso(tipoMetrica, valorInicial, valorAlvo, kr.valorAtual)
+  const status = calcularRisco({
+    dataInicio: plano.dataInicio ?? new Date(),
+    dataFim: plano.dataFim ?? new Date(),
+    valorInicial,
+    valorAlvo,
+    valorAtual: kr.valorAtual,
+    tipoMetrica,
+  })
+
+  const updated = await prisma.resultadoChave.update({
+    where: { id },
+    data: {
+      descricao: parsed.descricao,
+      tipoMetrica: parsed.tipoMetrica,
+      valorInicial: parsed.valorInicial,
+      valorAlvo: parsed.valorAlvo,
+      unidade: parsed.unidade,
+      peso: parsed.peso,
+      progresso,
+      status,
+    },
+  })
+
+  // Recalcula progresso ponderado do Objetivo
+  const allKrs = kr.objetivo.resultadosChave.map((k) =>
+    k.id === id ? { progresso, peso } : k
+  )
+  await prisma.objetivo.update({
+    where: { id: kr.objetivoId },
+    data: { progresso: calcularProgressoObjetivo(allKrs) },
+  })
+
+  // Regenera a linha de tendência (baseline) se o plano tem datas
+  if (plano.dataInicio && plano.dataFim) {
+    await prisma.linhaTendencia.deleteMany({ where: { resultadoChaveId: id } })
+    const pontos = gerarLinhaTendencia({
+      dataInicio: plano.dataInicio,
+      dataFim: plano.dataFim,
+      valorInicial,
+      valorAlvo,
+    })
+    await prisma.linhaTendencia.createMany({
+      data: pontos.map((p) => ({ resultadoChaveId: id, data: p.data, valor: p.valor })),
+    })
+  }
+
+  return updated
 }

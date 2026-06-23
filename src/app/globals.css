@@ -1,50 +1,174 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --navy: #0d2535;
-  --navy-light: #163347;
-  --teal: #2b6478;
-  --teal-hover: #235469;
-  --gold: #c9a54c;
-  --green-accent: #22c55e;
-  --bg: #f0f2f5;
-  --card: #ffffff;
-  --border: #e5e7eb;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  /* Status de risco do KR — mapeiam 1:1 a StatusRisco (no_prazo|em_atraso|em_risco|risco_alto).
+     Cada nível tem fg (texto/ícone) e bg (fundo da pill). */
+  --status-no-prazo: oklch(0.52 0.13 152);          /* green-700  #15803D */
+  --status-no-prazo-bg: oklch(0.95 0.05 152);       /* green-100  #DCFCE7 */
+  --status-em-atraso: oklch(0.55 0.12 70);          /* amber-700  #B45309 */
+  --status-em-atraso-bg: oklch(0.96 0.05 95);       /* amber-100  #FEF3C7 */
+  --status-em-risco: oklch(0.55 0.16 47);           /* orange-700 #C2410C */
+  --status-em-risco-bg: oklch(0.95 0.04 67);        /* orange-100 #FFEDD5 */
+  --status-risco-alto: oklch(0.577 0.245 27.325);   /* red-600    #DC2626 */
+  --status-risco-alto-bg: oklch(0.94 0.05 19);      /* red-100    #FEE2E2 */
+
+  /* shadcn/ui tokens — azul de ação #4C8CEC, área de trabalho cinza-azulada */
+  --background: oklch(0.969 0.006 247);             /* #F0F4F9 — área de trabalho */
+  --foreground: oklch(0.21 0.04 257);               /* slate-900 #0F172A */
+  --card: oklch(1 0 0);                             /* superfícies brancas */
+  --card-foreground: oklch(0.21 0.04 257);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.04 257);
+  --primary: oklch(0.66 0.16 256);                  /* #4C8CEC */
+  --primary-foreground: oklch(0.985 0 0);
+  --primary-hover: oklch(0.60 0.16 257);            /* #3B79DB */
+  --brand-tint: oklch(0.84 0.06 258);               /* #B2CDF8 — auth/marketing/realce */
+
+  --secondary: oklch(0.96 0.02 256);
+  --secondary-foreground: oklch(0.55 0.16 256);
+  --muted: oklch(0.968 0.007 247);                  /* slate-100 */
+  --muted-foreground: oklch(0.55 0.03 257);         /* slate-500 #64748B */
+  --accent: oklch(0.96 0.02 256);
+  --accent-foreground: oklch(0.55 0.16 256);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 256);                 /* slate-200 #E2E8F0 */
+  --input: oklch(0.929 0.013 256);
+  --ring: oklch(0.66 0.16 256);
+  --radius: 0.5rem;
+
+  /* Sidebar tokens */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.55 0.03 257);
+  --sidebar-primary: oklch(0.66 0.16 256);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.96 0.02 256);
+  --sidebar-accent-foreground: oklch(0.55 0.16 256);
+  --sidebar-border: oklch(0.929 0.013 256);
+  --sidebar-ring: oklch(0.66 0.16 256);
+}
+
+.dark {
+  /* Status — versões para fundo escuro (texto mais claro, fundo translúcido escuro) */
+  --status-no-prazo: oklch(0.72 0.15 152);
+  --status-no-prazo-bg: oklch(0.30 0.07 152);
+  --status-em-atraso: oklch(0.78 0.13 80);
+  --status-em-atraso-bg: oklch(0.32 0.06 80);
+  --status-em-risco: oklch(0.72 0.15 50);
+  --status-em-risco-bg: oklch(0.32 0.07 50);
+  --status-risco-alto: oklch(0.70 0.19 25);
+  --status-risco-alto-bg: oklch(0.32 0.09 22);
+
+  --background: oklch(0.18 0.03 264);               /* #0B1220 */
+  --foreground: oklch(0.92 0.01 250);               /* #E2E8F0 */
+  --card: oklch(0.23 0.03 264);                     /* #131C2E */
+  --card-foreground: oklch(0.92 0.01 250);
+  --popover: oklch(0.23 0.03 264);
+  --popover-foreground: oklch(0.92 0.01 250);
+  --primary: oklch(0.72 0.14 256);                  /* #6BA0F0 */
+  --primary-foreground: oklch(0.18 0.03 264);
+  --primary-hover: oklch(0.66 0.16 256);
+  --brand-tint: oklch(0.50 0.10 260);
+  --secondary: oklch(0.28 0.03 260);
+  --secondary-foreground: oklch(0.92 0.01 250);
+  --muted: oklch(0.28 0.03 260);
+  --muted-foreground: oklch(0.70 0.02 257);         /* #94A3B8 */
+  --accent: oklch(0.28 0.03 260);
+  --accent-foreground: oklch(0.92 0.01 250);
+  --destructive: oklch(0.62 0.21 25);
+  --border: oklch(0.30 0.02 260);                   /* #1E293B */
+  --input: oklch(0.30 0.02 260);
+  --ring: oklch(0.72 0.14 256);
+
+  --sidebar: oklch(0.23 0.03 264);
+  --sidebar-foreground: oklch(0.70 0.02 257);
+  --sidebar-primary: oklch(0.72 0.14 256);
+  --sidebar-primary-foreground: oklch(0.18 0.03 264);
+  --sidebar-accent: oklch(0.28 0.03 260);
+  --sidebar-accent-foreground: oklch(0.92 0.01 250);
+  --sidebar-border: oklch(0.30 0.02 260);
+  --sidebar-ring: oklch(0.72 0.14 256);
 }
 
 @theme inline {
-  --color-navy: var(--navy);
-  --color-teal: var(--teal);
-  --color-gold: var(--gold);
-  --color-bg: var(--bg);
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-brand-tint: var(--brand-tint);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  /* Status de risco do KR */
+  --color-status-no-prazo: var(--status-no-prazo);
+  --color-status-no-prazo-bg: var(--status-no-prazo-bg);
+  --color-status-em-atraso: var(--status-em-atraso);
+  --color-status-em-atraso-bg: var(--status-em-atraso-bg);
+  --color-status-em-risco: var(--status-em-risco);
+  --color-status-em-risco-bg: var(--status-em-risco-bg);
+  --color-status-risco-alto: var(--status-risco-alto);
+  --color-status-risco-alto-bg: var(--status-risco-alto-bg);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* Raio — escala arredondada da spine. Uso real dos primitivos: Button/Input/Sheet=lg(12px),
+     Card=xl(16px), pílulas=rounded-4xl/full. Mantida a derivação original (já entrega a intenção). */
+  --radius-sm: calc(var(--radius) * 0.75);          /* 6px */
+  --radius-md: var(--radius);                       /* 8px */
+  --radius-lg: calc(var(--radius) * 1.5);           /* 12px */
+  --radius-xl: calc(var(--radius) * 2);             /* 16px */
 }
 
-body {
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Progress bar */
-.progress-bar {
-  height: 4px;
-  background: #e5e7eb;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.progress-bar-fill {
-  height: 100%;
-  background: var(--teal);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
-/* Circular progress */
+/* Circular progress (usado pelos gauges do acompanhamento) */
 .progress-ring {
   transform: rotate(-90deg);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* Tipografia de métrica — números em destaque (gauges, contadores, % de KR). Fonte Inter. */
+  .text-metric {
+    font-weight: 700;
+    font-size: 1.75rem;     /* 28px */
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+  .text-metric-lg {
+    font-weight: 700;
+    font-size: 2.5rem;      /* 40px */
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
 }

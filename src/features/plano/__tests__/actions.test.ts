@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createPlanoCorporativo } from '../actions'
+import { createPlanoCorporativo, updatePlano, createPlanoDepartamento } from '../actions'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     planoEstrategico: { create: vi.fn() },
-    plano: { create: vi.fn() },
+    plano: { create: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn() },
     objetivo: { create: vi.fn() },
-    resultadoChave: { create: vi.fn() },
-    linhaTendencia: { createMany: vi.fn() },
+    resultadoChave: { create: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    linhaTendencia: { createMany: vi.fn(), deleteMany: vi.fn() },
   },
 }))
 
@@ -22,8 +22,19 @@ vi.mock('@/lib/openai', () => ({
   MODELO_PADRAO: 'gpt-4o',
 }))
 
+vi.mock('@/features/auth/guards', () => ({
+  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1', tipoUser: 'admin' })),
+  assertMesmoTenant: (recurso: string | null | undefined, usuario: string) => {
+    if (recurso !== usuario) throw new Error('Recurso não encontrado')
+  },
+  assertPodeMutarPlano: vi.fn(async () => {}),
+  assertPapelPlano: vi.fn(async () => {}),
+  resolverPapelPlano: vi.fn(async () => 'owner'),
+}))
+
 import { prisma } from '@/lib/prisma'
 import { openai } from '@/lib/openai'
+import { assertPodeMutarPlano } from '@/features/auth/guards'
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 const mockOpenAI = openai as unknown as { chat: { completions: { create: ReturnType<typeof vi.fn> } } }
@@ -75,7 +86,7 @@ describe('createPlanoCorporativo', () => {
         ],
       })))
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     expect(result).toEqual({ planoId: 'plano-1' })
     expect(mockPrisma.planoEstrategico.create).toHaveBeenCalledTimes(1)
@@ -92,7 +103,7 @@ describe('createPlanoCorporativo', () => {
       .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ Objectives: [{ Title: 'Obj', Description: 'Desc' }] })))
       .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ KeyResults: [{ Description: 'KR', ValorInicial: 0, ValorAlvo: 100, Unidade: '%' }] })))
 
-    await createPlanoCorporativo('cliente-1', validInput)
+    await createPlanoCorporativo(validInput)
 
     expect(mockPrisma.planoEstrategico.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -116,7 +127,7 @@ describe('createPlanoCorporativo', () => {
       .mockResolvedValueOnce(makeOpenAIResponse('json inválido !!!'))
       .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ KeyResults: [] })))
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     expect(result).toEqual({ planoId: 'plano-1' })
     // Should create 3 fallback objectives
@@ -136,7 +147,7 @@ describe('createPlanoCorporativo', () => {
       })))
       .mockResolvedValueOnce(makeOpenAIResponse('json inválido !!!'))
 
-    await createPlanoCorporativo('cliente-1', validInput)
+    await createPlanoCorporativo(validInput)
 
     // 2 fallback KRs should be created
     expect(mockPrisma.resultadoChave.create).toHaveBeenCalledTimes(2)
@@ -157,7 +168,7 @@ describe('createPlanoCorporativo', () => {
         KeyResults: [{ Description: 'KR 1', ValorInicial: 0, ValorAlvo: 100, Unidade: '%' }],
       })))
 
-    await createPlanoCorporativo('cliente-1', validInput)
+    await createPlanoCorporativo(validInput)
 
     expect(mockPrisma.linhaTendencia.createMany).toHaveBeenCalledTimes(1)
     const call = mockPrisma.linhaTendencia.createMany.mock.calls[0][0]
@@ -166,7 +177,7 @@ describe('createPlanoCorporativo', () => {
 
   it('lança erro de validação para dados inválidos', async () => {
     await expect(
-      createPlanoCorporativo('cliente-1', { ...validInput, empresa: 'T' })
+      createPlanoCorporativo({ ...validInput, empresa: 'T' })
     ).rejects.toThrow()
   })
 
@@ -181,7 +192,7 @@ describe('createPlanoCorporativo', () => {
       .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ outro: 'campo' })))
       .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ KeyResults: [] })))
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     expect(result).toEqual({ planoId: 'plano-1' })
     // No objectives to create when Objectives field is absent
@@ -199,7 +210,7 @@ describe('createPlanoCorporativo', () => {
       .mockResolvedValueOnce({ choices: [{ message: { content: null } }] })
       .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ KeyResults: [] })))
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     // JSON.parse('{}') gives {}, Objectives ?? [] gives [], so no objectives created
     expect(result).toEqual({ planoId: 'plano-1' })
@@ -216,7 +227,7 @@ describe('createPlanoCorporativo', () => {
       .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ Objectives: [{ Title: 'Obj', Description: 'Desc' }] })))
       .mockResolvedValue({ choices: [{ message: { content: null } }] })
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     expect(result).toEqual({ planoId: 'plano-1' })
     expect(mockPrisma.resultadoChave.create).not.toHaveBeenCalled()
@@ -233,7 +244,7 @@ describe('createPlanoCorporativo', () => {
       .mockResolvedValueOnce(makeOpenAIResponse(JSON.stringify({ Objectives: [{ Title: 'Obj', Description: 'Desc' }] })))
       .mockResolvedValue(makeOpenAIResponse(JSON.stringify({ outro: 'campo' })))
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     expect(result).toEqual({ planoId: 'plano-1' })
     expect(mockPrisma.resultadoChave.create).not.toHaveBeenCalled()
@@ -254,7 +265,7 @@ describe('createPlanoCorporativo', () => {
         KeyResults: [{ Description: 'KR sem valores', Unidade: '%' }],
       })))
 
-    const result = await createPlanoCorporativo('cliente-1', validInput)
+    const result = await createPlanoCorporativo(validInput)
 
     expect(result).toEqual({ planoId: 'plano-1' })
     expect(mockPrisma.resultadoChave.create).toHaveBeenCalledWith(
@@ -262,5 +273,99 @@ describe('createPlanoCorporativo', () => {
         data: expect.objectContaining({ valorInicial: 0, valorAlvo: 100 }),
       })
     )
+  })
+})
+
+describe('updatePlano', () => {
+  const datasIguais = { clienteId: 'cliente-1', dataInicio: new Date('2025-01-01'), dataFim: new Date('2025-12-31') }
+
+  it('atualiza campos sem recomputar KRs quando as datas não mudam', async () => {
+    mockPrisma.plano.findUniqueOrThrow.mockResolvedValue(datasIguais)
+    mockPrisma.plano.update.mockResolvedValue({ id: 'plano-1', ...datasIguais })
+
+    await updatePlano('plano-1', { titulo: 'Novo título' })
+
+    expect(mockPrisma.plano.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'plano-1' }, data: expect.objectContaining({ titulo: 'Novo título' }) })
+    )
+    expect(mockPrisma.resultadoChave.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.linhaTendencia.deleteMany).not.toHaveBeenCalled()
+    // Editar plano = operação 'editarEstrutura' (só em "Em planejamento").
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('plano-1', expect.anything(), 'editarEstrutura')
+  })
+
+  it('recomputa status e regenera tendência de todos os KRs quando as datas mudam', async () => {
+    mockPrisma.plano.findUniqueOrThrow.mockResolvedValue(datasIguais)
+    mockPrisma.plano.update.mockResolvedValue({
+      id: 'plano-1',
+      dataInicio: new Date('2025-02-01'),
+      dataFim: new Date('2025-11-30'),
+    })
+    mockPrisma.resultadoChave.findMany.mockResolvedValue([
+      { id: 'kr-1', tipoMetrica: 'aumentar', valorInicial: 0, valorAlvo: 100, valorAtual: 50 },
+    ])
+    mockPrisma.resultadoChave.update.mockResolvedValue({})
+    mockPrisma.linhaTendencia.deleteMany.mockResolvedValue({ count: 1 })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    await updatePlano('plano-1', { dataFim: new Date('2025-11-30') })
+
+    expect(mockPrisma.resultadoChave.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'kr-1' }, data: expect.objectContaining({ status: expect.any(String) }) })
+    )
+    expect(mockPrisma.linhaTendencia.deleteMany).toHaveBeenCalledWith({ where: { resultadoChaveId: 'kr-1' } })
+    expect(mockPrisma.linhaTendencia.createMany).toHaveBeenCalled()
+  })
+
+  it('lança erro de validação para título curto', async () => {
+    await expect(updatePlano('plano-1', { titulo: 'AB' })).rejects.toThrow()
+  })
+})
+
+describe('createPlanoDepartamento', () => {
+  const paiCuid = 'clh1234567890abcdefghijklm'
+  const valido = {
+    titulo: 'Plano de Marketing',
+    planoPaiId: paiCuid,
+    dataInicio: new Date('2025-01-01'),
+    dataFim: new Date('2025-12-31'),
+  }
+
+  it('cria plano de apoio com tipo apoio, planoPaiId e status edicao', async () => {
+    mockPrisma.plano.findUniqueOrThrow.mockResolvedValue({ clienteId: 'cliente-1' })
+    mockPrisma.plano.create.mockResolvedValue({ id: 'apoio-1' })
+
+    const result = await createPlanoDepartamento(valido)
+
+    expect(result).toEqual({ planoId: 'apoio-1' })
+    // Criar plano de apoio exige 'gerirPlano' (owner) sobre o plano-pai.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith(paiCuid, expect.anything(), 'gerirPlano')
+    expect(mockPrisma.plano.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clienteId: 'cliente-1',
+          planoPaiId: paiCuid,
+          tipo: 'apoio',
+          status: 'edicao',
+          titulo: 'Plano de Marketing',
+        }),
+      })
+    )
+  })
+
+  it('lança erro de validação para título curto', async () => {
+    await expect(createPlanoDepartamento({ ...valido, titulo: 'AB' })).rejects.toThrow()
+  })
+
+  it('lança erro de validação para planoPaiId inválido', async () => {
+    await expect(createPlanoDepartamento({ ...valido, planoPaiId: 'nao-cuid' })).rejects.toThrow()
+  })
+
+  it('bloqueia plano-pai de outro tenant', async () => {
+    // O isolamento (tenant→papel→estado) é imposto por assertPodeMutarPlano (testado em guards.test.ts);
+    // aqui verificamos que createPlanoDepartamento propaga a rejeição do guard e não cria nada.
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Recurso não encontrado'))
+    await expect(createPlanoDepartamento(valido)).rejects.toThrow()
+    expect(mockPrisma.plano.create).not.toHaveBeenCalled()
   })
 })

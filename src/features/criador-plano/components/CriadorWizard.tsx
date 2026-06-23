@@ -2,7 +2,24 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  Sparkles,
+  X,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react'
+
 import { createPlanoCorporativo } from '@/features/plano/actions'
+import { fetchSugestoes } from '@/features/criador-plano/lib/sugestoes'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,8 +49,6 @@ const initial: WizardData = {
   dataInicio: '', dataFim: '',
 }
 
-// ─── Step definitions ─────────────────────────────────────────────────────────
-
 const STEPS = [
   'Descrição da empresa',
   'Visão',
@@ -48,81 +63,14 @@ const STEPS = [
   'Datas do plano',
 ]
 
-// ─── AI fetch helper ──────────────────────────────────────────────────────────
-
-async function fetchAI(endpoint: string, body: object): Promise<string[]> {
-  const res = await fetch(`/api/ai/${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok || !res.body) return []
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-  }
-  return buffer.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 5)
-}
-
 // ─── Reusable sub-components ─────────────────────────────────────────────────
-
-function StepHeader({ title, index, active, done, onClick }: {
-  title: string; index: number; active: boolean; done: boolean; onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors rounded-lg"
-      style={{
-        background: active ? 'white' : 'transparent',
-        border: active ? '1px solid var(--border)' : '1px solid transparent',
-        color: active ? 'var(--text-primary)' : done ? 'var(--text-secondary)' : 'var(--text-muted)',
-      }}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-          style={{
-            background: done ? 'var(--teal)' : active ? 'var(--navy)' : '#e5e7eb',
-            color: done || active ? 'white' : 'var(--text-muted)',
-          }}
-        >
-          {done ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <path d="M20 6L9 17l-5-5"/>
-            </svg>
-          ) : index + 1}
-        </span>
-        <span className="text-sm font-medium">{title}</span>
-      </div>
-      <svg
-        width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-        style={{ transform: active ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}
-      >
-        <path d="M9 18l6-6-6-6"/>
-      </svg>
-    </button>
-  )
-}
 
 function SuggestButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
-      style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-      </svg>
-      {loading ? 'Gerando...' : 'Sugerir'}
-    </button>
+    <Button type="button" variant="outline" size="sm" onClick={onClick} disabled={loading} className="gap-1.5">
+      <Sparkles className="size-3.5" />
+      {loading ? 'Gerando…' : 'Sugerir'}
+    </Button>
   )
 }
 
@@ -136,71 +84,68 @@ function ListInput({ items, onChange, placeholder }: {
     setInput('')
   }
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#f9fafb', border: '1px solid var(--border)' }}>
-          <span className="flex-1 text-sm" style={{ color: 'var(--text-primary)' }}>{item}</span>
-          <button onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2">
+          <span className="flex-1 text-sm text-foreground">{item}</span>
+          <button
+            type="button"
+            aria-label={`Remover ${item}`}
+            onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+            className="text-muted-foreground transition-colors hover:text-destructive"
+          >
+            <X className="size-3.5" />
           </button>
         </div>
       ))}
       <div className="flex gap-2">
-        <input
+        <Input
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
-          placeholder={placeholder ?? 'Adicionar item...'}
-          className="flex-1 px-3 py-2 text-sm rounded-lg outline-none"
-          style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+          placeholder={placeholder ?? 'Adicionar item…'}
         />
-        <button
-          type="button" onClick={add}
-          className="px-3 py-2 rounded-lg text-sm font-medium"
-          style={{ background: '#f3f4f6', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-        >
-          + Adicionar
-        </button>
+        <Button type="button" variant="outline" size="sm" onClick={add} className="gap-1.5 shrink-0">
+          <Plus className="size-3.5" /> Adicionar
+        </Button>
       </div>
     </div>
   )
 }
 
-function NavButtons({ onBack, onNext, isFirst, isLast, disabled }: {
-  onBack: () => void; onNext: () => void; isFirst: boolean; isLast: boolean; disabled?: boolean
+function Suggestions({ items, onPick, testIdPrefix }: {
+  items: string[]; onPick: (s: string) => void; testIdPrefix?: string
 }) {
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground">Nenhuma sugestão gerada; escreva manualmente.</p>
+  }
   return (
-    <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-      <button
-        type="button" onClick={onBack} disabled={isFirst}
-        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-30 transition-colors hover:bg-gray-100"
-        style={{ color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-        Voltar
-      </button>
-      {!isLast && (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs font-medium text-muted-foreground">Sugestões — clique para usar:</p>
+      {items.map((s, i) => (
         <button
-          type="button" onClick={onNext} disabled={disabled}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-opacity hover:opacity-90"
-          style={{ background: 'var(--teal)' }}
+          key={i}
+          type="button"
+          data-testid={testIdPrefix ? `${testIdPrefix}-item` : undefined}
+          onClick={() => onPick(s)}
+          className="w-full rounded-lg border border-border px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >
-          Próximo
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+          {s}
         </button>
-      )}
+      ))}
     </div>
   )
 }
 
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
 
-export function CriadorWizard({ clienteId }: { clienteId: string }) {
+export function CriadorWizard() {
   const router = useRouter()
   const [active, setActive] = useState(0)
   const [data, setData] = useState<WizardData>(initial)
   const [loadingAI, setLoadingAI] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<Record<string, string[]>>({})
+  const [erros, setErros] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
 
   const set = (key: keyof WizardData, value: unknown) =>
@@ -208,19 +153,48 @@ export function CriadorWizard({ clienteId }: { clienteId: string }) {
 
   const suggest = async (key: string, endpoint: string, body: object) => {
     setLoadingAI(key)
-    const results = await fetchAI(endpoint, body)
-    setSuggestions(prev => ({ ...prev, [key]: results }))
-    setLoadingAI(null)
+    setErros(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    try {
+      const results = await fetchSugestoes(endpoint, body)
+      setSuggestions(prev => ({ ...prev, [key]: results }))
+    } catch {
+      setErros(prev => ({ ...prev, [key]: 'Não foi possível gerar sugestões. Escreva manualmente.' }))
+    } finally {
+      setLoadingAI(null)
+    }
   }
 
-  const go = (i: number) => setActive(i)
+  // Footer de campo assistido: erro inline + lista de sugestões (pick explícito)
+  const assistedExtras = (key: string, onPick: (s: string) => void, testIdPrefix?: string) => (
+    <>
+      {erros[key] && (
+        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {erros[key]}
+        </p>
+      )}
+      {suggestions[key] && <Suggestions items={suggestions[key]} onPick={onPick} testIdPrefix={testIdPrefix} />}
+    </>
+  )
+
+  const appendUnico = (key: keyof WizardData, atual: string[], valor: string) => {
+    if (!atual.includes(valor)) set(key, [...atual, valor])
+  }
+
   const next = () => setActive(s => Math.min(s + 1, STEPS.length - 1))
   const back = () => setActive(s => Math.max(s - 1, 0))
+
+  const isFirst = active === 0
+  const isLast = active === STEPS.length - 1
+  const nextDisabled = active === 0 && (!data.empresa || !data.ramo)
 
   const handleGenerate = async () => {
     setStatus('loading')
     try {
-      const result = await createPlanoCorporativo(clienteId, {
+      const result = await createPlanoCorporativo({
         empresa: data.empresa,
         ramo: data.ramo,
         descricaoNegocio: data.descricaoNegocio || data.empresa,
@@ -245,180 +219,168 @@ export function CriadorWizard({ clienteId }: { clienteId: string }) {
     }
   }
 
-  const fieldStyle = {
-    border: '1px solid var(--border)',
-    color: 'var(--text-primary)',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    fontSize: '14px',
-    outline: 'none',
-    width: '100%',
+  // ── Loading / done / error states ──────────────────────────────────────────
+
+  if (status === 'loading') {
+    return (
+      <div className="flex flex-col items-center justify-center py-24" aria-live="polite">
+        <Loader2 className="mb-6 size-12 animate-spin text-primary" />
+        <p className="mb-1 text-lg font-semibold text-foreground">Gerando seu plano…</p>
+        <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos</p>
+      </div>
+    )
   }
+
+  if (status === 'done') {
+    return (
+      <div className="flex flex-col items-center justify-center py-24" aria-live="polite">
+        <CheckCircle2 className="mb-6 size-14 text-status-no-prazo" />
+        <p className="text-lg font-semibold text-foreground">Plano criado com sucesso!</p>
+        <p className="mt-1 text-sm text-muted-foreground">Redirecionando…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="flex flex-col items-center justify-center py-24" aria-live="assertive">
+        <AlertCircle className="mb-6 size-14 text-destructive" />
+        <p className="mb-1 text-lg font-semibold text-foreground">Ops… algo deu errado</p>
+        <p className="mb-6 text-sm text-muted-foreground">Tente novamente</p>
+        <Button onClick={() => setStatus('idle')}>Tentar novamente</Button>
+      </div>
+    )
+  }
+
+  // ── Step content ───────────────────────────────────────────────────────────
 
   const stepContent = (index: number) => {
     switch (index) {
       case 0: return (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Nome da empresa</label>
-            <input style={fieldStyle} value={data.empresa} onChange={e => set('empresa', e.target.value)} placeholder="Ex: Acme Corp" />
+        <div className="flex flex-col gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="w-empresa">Nome da empresa</Label>
+            <Input id="w-empresa" value={data.empresa} onChange={e => set('empresa', e.target.value)} placeholder="Ex: Acme Corp" />
           </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Ramo de atuação</label>
-            <input style={fieldStyle} value={data.ramo} onChange={e => set('ramo', e.target.value)} placeholder="Ex: Tecnologia B2B" />
+          <div className="grid gap-1.5">
+            <Label htmlFor="w-ramo">Ramo de atuação</Label>
+            <Input id="w-ramo" value={data.ramo} onChange={e => set('ramo', e.target.value)} placeholder="Ex: Tecnologia B2B" />
           </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Descrição do negócio</label>
-            <textarea rows={3} style={{ ...fieldStyle, resize: 'none' }} value={data.descricaoNegocio} onChange={e => set('descricaoNegocio', e.target.value)} placeholder="O que a empresa faz?" />
+          <div className="grid gap-1.5">
+            <Label htmlFor="w-descricao">Descrição do negócio</Label>
+            <Textarea id="w-descricao" rows={3} value={data.descricaoNegocio} onChange={e => set('descricaoNegocio', e.target.value)} placeholder="O que a empresa faz?" />
           </div>
-          <NavButtons onBack={back} onNext={next} isFirst={true} isLast={false} disabled={!data.empresa || !data.ramo} />
         </div>
       )
 
       case 1: return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Visão da empresa</label>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="w-visao">Visão da empresa</Label>
             <SuggestButton
               loading={loadingAI === 'visao'}
               onClick={() => suggest('visao', 'visao', { empresa: data.empresa, ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })}
             />
           </div>
-          <textarea rows={3} style={{ ...fieldStyle, resize: 'none' }} value={data.visao} onChange={e => set('visao', e.target.value)} placeholder="Onde a empresa quer chegar?" />
-          {suggestions.visao && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Sugestões — clique para usar:</p>
-              {suggestions.visao.map((s, i) => (
-                <button key={i} onClick={() => set('visao', s)} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-blue-50 transition-colors" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
+          <Textarea id="w-visao" rows={3} value={data.visao} onChange={e => set('visao', e.target.value)} placeholder="Onde a empresa quer chegar?" />
+          {assistedExtras('visao', s => set('visao', s))}
         </div>
       )
 
       case 2: return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Missão da empresa</label>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="w-missao">Missão da empresa</Label>
             <SuggestButton
               loading={loadingAI === 'missao'}
               onClick={() => suggest('missao', 'missao', { empresa: data.empresa, ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })}
             />
           </div>
-          <textarea rows={4} style={{ ...fieldStyle, resize: 'none' }} value={data.missao} onChange={e => set('missao', e.target.value)} placeholder="Por que a empresa existe?" />
-          {suggestions.missao && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Sugestões — clique para usar:</p>
-              {suggestions.missao.map((s, i) => (
-                <button key={i} data-testid="sugestao-missao-item" onClick={() => set('missao', s)} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-blue-50 transition-colors" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
+          <Textarea id="w-missao" rows={4} value={data.missao} onChange={e => set('missao', e.target.value)} placeholder="Por que a empresa existe?" />
+          {assistedExtras('missao', s => set('missao', s), 'sugestao-missao')}
         </div>
       )
 
       case 3: return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Valores organizacionais</label>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Label>Valores organizacionais</Label>
             <SuggestButton
               loading={loadingAI === 'valores'}
-              onClick={async () => {
-                const res = await fetchAI('valores', { empresa: data.empresa, ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })
-                set('valores', [...data.valores, ...res.filter(r => !data.valores.includes(r))])
-              }}
+              onClick={() => suggest('valores', 'valores', { empresa: data.empresa, ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })}
             />
           </div>
           <ListInput items={data.valores} onChange={v => set('valores', v)} placeholder="Ex: Inovação" />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
+          {assistedExtras('valores', s => appendUnico('valores', data.valores, s))}
         </div>
       )
 
       case 4: return (
-        <div className="space-y-3">
-          <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>O que devemos começar a fazer?</label>
+        <div className="flex flex-col gap-3">
+          <Label>O que devemos começar a fazer?</Label>
           <ListInput items={data.comecar} onChange={v => set('comecar', v)} placeholder="Ex: Investir em marketing digital" />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
         </div>
       )
 
       case 5: return (
-        <div className="space-y-3">
-          <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>O que precisamos manter?</label>
+        <div className="flex flex-col gap-3">
+          <Label>O que precisamos manter?</Label>
           <ListInput items={data.manter} onChange={v => set('manter', v)} placeholder="Ex: Qualidade no atendimento" />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
         </div>
       )
 
       case 6: return (
-        <div className="space-y-3">
-          <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>O que precisamos parar de fazer?</label>
+        <div className="flex flex-col gap-3">
+          <Label>O que precisamos parar de fazer?</Label>
           <ListInput items={data.parar} onChange={v => set('parar', v)} placeholder="Ex: Processos manuais" />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
         </div>
       )
 
       case 7: return (
-        <div className="space-y-3">
-          <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Onde estamos hoje</label>
-          <textarea rows={4} style={{ ...fieldStyle, resize: 'none' }} value={data.ondeEstamos} onChange={e => set('ondeEstamos', e.target.value)} placeholder="Descreva a situação atual da empresa..." />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
+        <div className="flex flex-col gap-3">
+          <Label htmlFor="w-onde">Onde estamos hoje</Label>
+          <Textarea id="w-onde" rows={4} value={data.ondeEstamos} onChange={e => set('ondeEstamos', e.target.value)} placeholder="Descreva a situação atual da empresa…" />
         </div>
       )
 
       case 8: return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Oportunidades</label>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Label>Oportunidades</Label>
             <SuggestButton
               loading={loadingAI === 'oportunidades'}
-              onClick={async () => {
-                const res = await fetchAI('oportunidades', { ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })
-                set('oportunidades', [...data.oportunidades, ...res.filter(r => !data.oportunidades.includes(r))])
-              }}
+              onClick={() => suggest('oportunidades', 'oportunidades', { ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })}
             />
           </div>
           <ListInput items={data.oportunidades} onChange={v => set('oportunidades', v)} placeholder="Ex: Expansão para novos mercados" />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
+          {assistedExtras('oportunidades', s => appendUnico('oportunidades', data.oportunidades, s))}
         </div>
       )
 
       case 9: return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Ameaças</label>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Label>Ameaças</Label>
             <SuggestButton
               loading={loadingAI === 'ameacas'}
-              onClick={async () => {
-                const res = await fetchAI('ameacas', { ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })
-                set('ameacas', [...data.ameacas, ...res.filter(r => !data.ameacas.includes(r))])
-              }}
+              onClick={() => suggest('ameacas', 'ameacas', { ramo: data.ramo, descricaoNegocio: data.descricaoNegocio })}
             />
           </div>
           <ListInput items={data.ameacas} onChange={v => set('ameacas', v)} placeholder="Ex: Aumento da concorrência" />
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={false} />
+          {assistedExtras('ameacas', s => appendUnico('ameacas', data.ameacas, s))}
         </div>
       )
 
       case 10: return (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Data início</label>
-              <input type="date" style={fieldStyle} value={data.dataInicio} onChange={e => set('dataInicio', e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Data fim</label>
-              <input type="date" style={fieldStyle} value={data.dataFim} onChange={e => set('dataFim', e.target.value)} />
-            </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="w-inicio">Data início</Label>
+            <Input id="w-inicio" type="date" value={data.dataInicio} onChange={e => set('dataInicio', e.target.value)} />
           </div>
-          <NavButtons onBack={back} onNext={next} isFirst={false} isLast={true} />
+          <div className="grid gap-1.5">
+            <Label htmlFor="w-fim">Data fim</Label>
+            <Input id="w-fim" type="date" value={data.dataFim} onChange={e => set('dataFim', e.target.value)} />
+          </div>
         </div>
       )
 
@@ -426,85 +388,57 @@ export function CriadorWizard({ clienteId }: { clienteId: string }) {
     }
   }
 
-  // ── Loading / done / error states ──────────────────────────────────────────
-
-  if (status === 'loading') {
-    return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <div className="w-16 h-16 rounded-full border-4 border-t-transparent animate-spin mb-6" style={{ borderColor: 'var(--teal)', borderTopColor: 'transparent' }} />
-        <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Gerando seu plano...</p>
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Isso pode levar alguns segundos</p>
-      </div>
-    )
-  }
-
-  if (status === 'done') {
-    return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6" style={{ background: '#d1fae5' }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#065f46" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-        </div>
-        <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Plano criado com sucesso!</p>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>Redirecionando...</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6" style={{ background: '#fee2e2' }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#991b1b" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </div>
-        <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Ops... algo deu errado</p>
-        <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>Tente novamente</p>
-        <button onClick={() => setStatus('idle')} className="px-5 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'var(--teal)' }}>
-          Tentar novamente
-        </button>
-      </div>
-    )
-  }
-
   // ── Main wizard ────────────────────────────────────────────────────────────
 
-  return (
-    <div className="max-w-xl mx-auto">
+  const pct = Math.round(((active + 1) / STEPS.length) * 100)
 
-      {/* Step list */}
-      <div className="space-y-1 mb-2">
-        {STEPS.map((title, i) => (
-          <div key={i} className="rounded-xl overflow-hidden" style={{ border: active === i ? '1px solid var(--border)' : '1px solid transparent' }}>
-            <StepHeader
-              title={title}
-              index={i}
-              active={active === i}
-              done={i < active}
-              onClick={() => go(i)}
-            />
-            {active === i && (
-              <div className="px-4 pb-4 pt-2 bg-white rounded-b-xl">
-                {stepContent(i)}
-              </div>
-            )}
-          </div>
-        ))}
+  return (
+    <div className="mx-auto max-w-xl">
+      {/* Progresso */}
+      <div className="mb-5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+            Passo {active + 1} de {STEPS.length}
+          </span>
+          <span className="text-xs text-muted-foreground">{pct}%</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+        </div>
       </div>
 
-      {/* Generate button — shown after last step */}
-      {active >= STEPS.length - 1 && (
-        <div className="mt-6 rounded-xl p-6 text-center" style={{ background: 'white', border: '1px solid var(--border)' }}>
-          <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Tudo pronto para a geração do plano estratégico</p>
-          <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>
+      {/* Anúncio do passo para leitores de tela */}
+      <div aria-live="polite" className="sr-only">
+        Passo {active + 1} de {STEPS.length}: {STEPS[active]}
+      </div>
+
+      {/* Cartão do passo */}
+      <div className="rounded-xl border border-border bg-card p-6">
+        <h2 className="mb-4 text-base font-semibold text-foreground">{STEPS[active]}</h2>
+        {stepContent(active)}
+
+        <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+          <Button type="button" variant="outline" size="sm" onClick={back} disabled={isFirst} className="gap-1.5">
+            <ChevronLeft className="size-4" /> Voltar
+          </Button>
+          {!isLast && (
+            <Button type="button" size="sm" onClick={next} disabled={nextDisabled} className="gap-1.5">
+              Próximo <ChevronRight className="size-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Geração — no último passo */}
+      {isLast && (
+        <div className="mt-6 rounded-xl border border-border bg-card p-6 text-center">
+          <p className="mb-1 text-sm font-medium text-foreground">Tudo pronto para a geração do plano estratégico</p>
+          <p className="mb-5 text-xs text-muted-foreground">
             A IA vai criar os objetivos e resultados-chave com base nas suas respostas
           </p>
-          <button
-            onClick={handleGenerate}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity"
-            style={{ background: 'var(--teal)' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            Gerar plano
-          </button>
+          <Button onClick={handleGenerate} className="gap-2">
+            <Check className="size-4" /> Gerar plano
+          </Button>
         </div>
       )}
     </div>

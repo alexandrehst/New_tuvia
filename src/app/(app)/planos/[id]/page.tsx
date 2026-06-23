@@ -2,90 +2,219 @@ export const dynamic = 'force-dynamic'
 
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { PlanoEditButton } from '@/features/plano/components/PlanoEditButton'
+import { PlanoApoioButton } from '@/features/plano/components/PlanoApoioButton'
+import { PlanoLifecycleControls } from '@/features/plano/components/PlanoLifecycleControls'
+import { podeEditarEstrutura, podeAtualizarValor, type StatusPlano } from '@/features/plano/lib/status'
 import { getPlanoWithObjetivos } from '@/features/plano/queries'
-import { PlanoTree } from '@/features/plano/components/PlanoTree'
+import { getClienteUsuarios } from '@/features/usuarios/queries'
+import { getCurrentUser } from '@/features/auth/guards'
+import { ObjetivosBoard } from '@/features/plano/components/ObjetivosBoard'
+import { Card, CardContent } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+
+function CircularProgress({ value, size = 60 }: { value: number; size?: number }) {
+  const r = (size - 10) / 2
+  const circ = 2 * Math.PI * r
+  const offset = circ - (Math.min(value, 100) / 100) * circ
+  const center = size / 2
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size}>
+        <circle cx={center} cy={center} r={r} fill="none" className="stroke-border" strokeWidth="5" />
+        <circle
+          cx={center} cy={center} r={r}
+          fill="none"
+          className="stroke-primary progress-ring"
+          strokeWidth="5"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground">
+        {Math.round(Math.min(100, Math.max(0, value)))}%
+      </span>
+    </div>
+  )
+}
+
+function calcTimeElapsed(dataInicio: Date, dataFim: Date): number {
+  const total = dataFim.getTime() - dataInicio.getTime()
+  if (total <= 0) return 0
+  const elapsed = Date.now() - dataInicio.getTime()
+  return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)))
+}
 
 export default async function PlanoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const plano = await getPlanoWithObjetivos(id)
+  const user = await getCurrentUser()
+  if (!user) notFound()
+
+  const plano = await getPlanoWithObjetivos(id, user.clienteId)
   if (!plano) notFound()
 
-  const dataFim = plano.dataFim
-    ? new Date(plano.dataFim).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-    : null
+  const objetivos = plano.objetivos ?? []
+  const podeEdicao = podeEditarEstrutura(plano.status)
+  const usuarios = await getClienteUsuarios(user.clienteId)
+  const todosKRs = objetivos.flatMap(o => o.resultadosChave)
+  const totalKRs = todosKRs.length
+  const completedKRs = todosKRs.filter(kr => kr.progresso >= 100).length
+  const openKRs = totalKRs - completedKRs
 
-  const objetivosCount = plano.objetivos?.length ?? 0
+  const overallProgress = objetivos.length > 0
+    ? Math.round(objetivos.reduce((sum, o) => sum + o.progresso, 0) / objetivos.length)
+    : 0
+
+  let timeElapsed = 0
+  let dataInicioStr: string | null = null
+  let dataFimStr: string | null = null
+  if (plano.dataInicio && plano.dataFim) {
+    timeElapsed = calcTimeElapsed(plano.dataInicio, plano.dataFim)
+    dataInicioStr = plano.dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    dataFimStr = plano.dataFim.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
 
   return (
-    <div className="p-8">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
-        <Link href="/planos" className="hover:underline">Todos os planos</Link>
-        <span>/</span>
-        <span style={{ color: 'var(--text-secondary)' }}>{plano.titulo}</span>
-      </div>
-
-      {/* Title row */}
-      <div className="flex items-start justify-between mb-1">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{plano.titulo}</h1>
-        <button
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-colors hover:bg-gray-50"
-          style={{ borderColor: 'var(--teal)', color: 'var(--teal)' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-          Editar plano
-        </button>
-      </div>
-
-      {dataFim && (
-        <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
-          Finaliza em {dataFim}
-        </p>
-      )}
-
-      {/* Tabs */}
-      <div className="flex items-center gap-6 mb-6" style={{ borderBottom: '2px solid var(--border)' }}>
-        <button
-          className="pb-3 text-sm font-semibold flex items-center gap-1.5"
-          style={{ borderBottom: '2px solid var(--teal)', color: 'var(--teal)', marginBottom: '-2px' }}
-        >
-          OKRs
-          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'var(--teal)', color: 'white' }}>
-            {objetivosCount}
-          </span>
-        </button>
-        <button className="pb-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Membros
-        </button>
-        <button className="pb-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          APIs
-        </button>
-      </div>
-
-      {/* Nova OKR button */}
-      <div className="mb-6">
-        <button
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity hover:opacity-90"
-          style={{ background: 'var(--teal)' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          Nova OKR
-        </button>
-      </div>
-
-      {/* OKR Tree */}
-      {objetivosCount === 0 ? (
-        <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-          <p className="text-sm">Nenhum objetivo ainda. Clique em &quot;Nova OKR&quot; para começar.</p>
+    <div className="p-8 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/planos" />}>Planos</BreadcrumbLink>
+              </BreadcrumbItem>
+              {plano.planoPai && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbLink render={<Link href={`/planos/${plano.planoPai.id}`} />}>
+                      {plano.planoPai.titulo}
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                </>
+              )}
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{plano.titulo}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-foreground">{plano.titulo}</h1>
         </div>
-      ) : (
-        <PlanoTree planos={[plano]} initialExpanded={id} />
+        <div className="flex items-center gap-2">
+          <PlanoLifecycleControls planoId={plano.id} status={plano.status as StatusPlano} />
+          {/* Edição estrutural (apoio/metadados) só faz sentido em "Em planejamento". */}
+          {podeEdicao && plano.tipo === 'corporativo' && (
+            <PlanoApoioButton
+              planoPaiId={plano.id}
+              dataInicio={plano.dataInicio}
+              dataFim={plano.dataFim}
+            />
+          )}
+          {podeEdicao && (
+            <PlanoEditButton
+              plano={{
+                id: plano.id,
+                titulo: plano.titulo,
+                dataInicio: plano.dataInicio,
+                dataFim: plano.dataFim,
+                frequenciaAtualizacao: plano.frequenciaAtualizacao,
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Summary card */}
+      <Card className="mb-8">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-8 flex-wrap">
+            {/* Overall achievement */}
+            <div className="flex items-center gap-4">
+              <CircularProgress value={overallProgress} />
+              <div>
+                <p className="font-semibold text-sm">Progresso geral</p>
+                <p className="text-xs text-muted-foreground">Média dos objetivos</p>
+              </div>
+            </div>
+
+            {plano.dataInicio && plano.dataFim && (
+              <>
+                <Separator orientation="vertical" className="h-14 hidden sm:block" />
+                <div className="flex items-center gap-4">
+                  <CircularProgress value={timeElapsed} />
+                  <div>
+                    <p className="font-semibold text-sm">Tempo decorrido</p>
+                    <p className="text-xs text-muted-foreground">Do período total</p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <Separator orientation="vertical" className="h-14 hidden sm:block" />
+
+            {/* KR counts */}
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-metric">{totalKRs}</p>
+                <p className="text-xs text-muted-foreground">Total KRs</p>
+              </div>
+              <div className="text-center">
+                <p className="text-metric text-primary">{openKRs}</p>
+                <p className="text-xs text-muted-foreground">Em aberto</p>
+              </div>
+              <div className="text-center">
+                <p className="text-metric">{completedKRs}</p>
+                <p className="text-xs text-muted-foreground">Concluídos</p>
+              </div>
+            </div>
+
+            {dataInicioStr && dataFimStr && (
+              <>
+                <Separator orientation="vertical" className="h-14 hidden sm:block" />
+                <div className="flex gap-6">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Início</p>
+                    <p className="text-sm font-medium">{dataInicioStr}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Fim</p>
+                    <p className="text-sm font-medium">{dataFimStr}</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Aviso de estado: edição estrutural só em "Em planejamento". */}
+      {!podeEdicao && (
+        <div role="status" className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          {plano.status === 'arquivado'
+            ? 'Plano arquivado — somente leitura.'
+            : 'Plano ativo — você pode atualizar os valores dos resultados-chave. Para editar a estrutura (objetivos, KRs, datas), use “Editar” para reabrir o plano.'}
+        </div>
       )}
+
+      {/* Objectives section */}
+      <ObjetivosBoard
+        objetivos={objetivos}
+        planoId={plano.id}
+        usuarios={usuarios}
+        podeEditar={podeEdicao}
+        podeAtualizarValor={podeAtualizarValor(plano.status)}
+      />
     </div>
   )
 }

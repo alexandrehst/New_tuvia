@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { signInSchema, signUpSchema, resetPasswordSchema, inviteUserSchema } from '../schemas'
+import { signInSchema, signUpSchema, resetPasswordSchema, inviteUserSchema, novaSenhaSchema } from '../schemas'
 
 describe('signInSchema', () => {
   it('aceita dados válidos', () => {
@@ -58,6 +58,25 @@ describe('resetPasswordSchema', () => {
 
   it('rejeita email inválido', () => {
     expect(resetPasswordSchema.safeParse({ email: 'invalido' }).success).toBe(false)
+  })
+})
+
+describe('novaSenhaSchema', () => {
+  it('aceita senhas válidas que conferem', () => {
+    const result = novaSenhaSchema.safeParse({ password: '12345678', confirmar: '12345678' })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejeita senha com menos de 8 caracteres', () => {
+    const result = novaSenhaSchema.safeParse({ password: '1234567', confirmar: '1234567' })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0].path).toContain('password')
+  })
+
+  it('rejeita quando as senhas não conferem', () => {
+    const result = novaSenhaSchema.safeParse({ password: '12345678', confirmar: '87654321' })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0].path).toContain('confirmar')
   })
 })
 

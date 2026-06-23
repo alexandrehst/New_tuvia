@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { updateKeyResultValor, createKeyResult } from '../actions'
+import { updateKeyResultValor, createKeyResult, updateKeyResult, deleteKeyResult, getKRHistorico } from '../actions'
 
 const validCuid = 'clh1234567890abcdefghijklm'
 const validCuid2 = 'clh9876543210zyxwvutsrqpon'
@@ -10,9 +10,11 @@ vi.mock('@/lib/prisma', () => ({
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
+      delete: vi.fn(),
     },
     historicoValores: {
       create: vi.fn(),
+      findMany: vi.fn(),
     },
     objetivo: {
       update: vi.fn(),
@@ -23,6 +25,8 @@ vi.mock('@/lib/prisma', () => ({
     },
     linhaTendencia: {
       createMany: vi.fn(),
+      deleteMany: vi.fn(),
+      findMany: vi.fn(),
     },
   },
 }))
@@ -32,8 +36,19 @@ vi.mock('@/lib/brevo', () => ({
   TEMPLATES: { ACOMPANHAMENTO_PLANO: 3 },
 }))
 
+vi.mock('@/features/auth/guards', () => ({
+  requireUser: vi.fn(async () => ({ id: 'u', clienteId: 'cliente-1', tipoUser: 'admin' })),
+  // getKRHistorico (leitura) ainda usa assertMesmoTenant; as mutações usam o contrato unificado.
+  assertMesmoTenant: (recurso: string | null | undefined, usuario: string) => {
+    if (recurso !== usuario) throw new Error('Recurso não encontrado')
+  },
+  // Autorização (tenant→papel→estado) testada em guards.test.ts; aqui no-op por padrão.
+  assertPodeMutarPlano: vi.fn(async () => ({ clienteId: 'cliente-1', status: 'edicao' })),
+}))
+
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/brevo'
+import { assertPodeMutarPlano } from '@/features/auth/guards'
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
 
@@ -51,6 +66,8 @@ const makeKr = (overrides = {}) => ({
   objetivo: {
     id: validCuid2,
     plano: {
+      id: 'plano-1',
+      clienteId: 'cliente-1',
       dataInicio: new Date('2025-01-01'),
       dataFim: new Date('2025-12-31'),
     },
@@ -77,6 +94,8 @@ describe('updateKeyResultValor', () => {
         data: expect.objectContaining({ valorAtual: 50, progresso: 50 }),
       })
     )
+    // Operação 'updateKeyResultValor' (permite estado publicado) — não 'editarEstrutura'.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('plano-1', expect.anything(), 'updateKeyResultValor')
   })
 
   it('registra histórico de valores', async () => {
@@ -156,7 +175,7 @@ describe('updateKeyResultValor', () => {
     const kr = makeKr({
       objetivo: {
         id: validCuid2,
-        plano: { dataInicio: null, dataFim: null },
+        plano: { clienteId: 'cliente-1', dataInicio: null, dataFim: null },
         resultadosChave: [{ id: validCuid, progresso: 0, peso: 1 }],
       },
     })
@@ -176,7 +195,7 @@ describe('updateKeyResultValor', () => {
     const kr = makeKr({
       objetivo: {
         id: validCuid2,
-        plano: { dataInicio: new Date('2025-01-01'), dataFim: new Date('2025-12-31') },
+        plano: { clienteId: 'cliente-1', dataInicio: new Date('2025-01-01'), dataFim: new Date('2025-12-31') },
         resultadosChave: [
           { id: validCuid, progresso: 0, peso: 1 },
           { id: otherKrId, progresso: 80, peso: 1 },
@@ -218,6 +237,8 @@ describe('createKeyResult', () => {
   const fakeObjetivo = {
     id: validCuid,
     plano: {
+      id: 'plano-1',
+      clienteId: 'cliente-1',
       dataInicio: new Date('2025-01-01'),
       dataFim: new Date('2025-12-31'),
     },
@@ -236,6 +257,8 @@ describe('createKeyResult', () => {
         data: expect.objectContaining({ valorAtual: 0 }),
       })
     )
+    // Criar KR = edição estrutural.
+    expect(vi.mocked(assertPodeMutarPlano)).toHaveBeenCalledWith('plano-1', expect.anything(), 'editarEstrutura')
   })
 
   it('gera linha de tendência quando plano tem datas', async () => {
@@ -253,7 +276,7 @@ describe('createKeyResult', () => {
   it('não gera linha de tendência quando plano não tem datas', async () => {
     mockPrisma.objetivo.findUniqueOrThrow.mockResolvedValue({
       id: validCuid,
-      plano: { dataInicio: null, dataFim: null },
+      plano: { clienteId: 'cliente-1', dataInicio: null, dataFim: null },
     })
     mockPrisma.resultadoChave.create.mockResolvedValue({ id: validCuid2 })
 
@@ -277,5 +300,104 @@ describe('createKeyResult', () => {
     await expect(
       createKeyResult({ ...validInput, descricao: 'AB' })
     ).rejects.toThrow()
+  })
+})
+
+describe('updateKeyResult', () => {
+  it('atualiza metadados, recalcula progresso/status e regenera tendência', async () => {
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue(
+      makeKr({ valorAtual: 50 }) // base 0→100, valor 50 → progresso 50%
+    )
+    mockPrisma.resultadoChave.update.mockResolvedValue({ id: validCuid })
+    mockPrisma.objetivo.update.mockResolvedValue({})
+    mockPrisma.linhaTendencia.deleteMany.mockResolvedValue({ count: 6 })
+    mockPrisma.linhaTendencia.createMany.mockResolvedValue({})
+
+    await updateKeyResult(validCuid, { descricao: 'Nova descrição', valorAlvo: 200 })
+
+    // valorAlvo 200, valorAtual 50 → progresso 25%
+    expect(mockPrisma.resultadoChave.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: validCuid },
+        data: expect.objectContaining({ descricao: 'Nova descrição', valorAlvo: 200, progresso: 25 }),
+      })
+    )
+    // tendência regenerada
+    expect(mockPrisma.linhaTendencia.deleteMany).toHaveBeenCalledWith({ where: { resultadoChaveId: validCuid } })
+    expect(mockPrisma.linhaTendencia.createMany).toHaveBeenCalled()
+    // progresso ponderado do objetivo recalculado
+    expect(mockPrisma.objetivo.update).toHaveBeenCalled()
+  })
+
+  it('não regenera tendência quando o plano não tem datas', async () => {
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue(
+      makeKr({
+        objetivo: {
+          id: validCuid2,
+          plano: { clienteId: 'cliente-1', dataInicio: null, dataFim: null },
+          resultadosChave: [{ id: validCuid, progresso: 0, peso: 1 }],
+        },
+      })
+    )
+    mockPrisma.resultadoChave.update.mockResolvedValue({ id: validCuid })
+    mockPrisma.objetivo.update.mockResolvedValue({})
+
+    await updateKeyResult(validCuid, { peso: 2 })
+
+    expect(mockPrisma.linhaTendencia.deleteMany).not.toHaveBeenCalled()
+    expect(mockPrisma.linhaTendencia.createMany).not.toHaveBeenCalled()
+  })
+
+  it('lança erro de validação para descrição muito curta', async () => {
+    await expect(updateKeyResult(validCuid, { descricao: 'AB' })).rejects.toThrow()
+  })
+})
+
+describe('deleteKeyResult', () => {
+  it('deleta o resultado-chave pelo id (mesmo tenant)', async () => {
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue({ objetivo: { plano: { clienteId: 'cliente-1' } } })
+    mockPrisma.resultadoChave.delete.mockResolvedValue({})
+
+    await deleteKeyResult(validCuid)
+
+    expect(mockPrisma.resultadoChave.delete).toHaveBeenCalledWith({ where: { id: validCuid } })
+  })
+
+  it('bloqueia exclusão quando o guard nega (tenant/papel/estado)', async () => {
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue({ objetivo: { planoId: validCuid2 } })
+    vi.mocked(assertPodeMutarPlano).mockRejectedValueOnce(new Error('Acesso negado'))
+    await expect(deleteKeyResult(validCuid)).rejects.toThrow()
+    expect(mockPrisma.resultadoChave.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('getKRHistorico', () => {
+  it('retorna histórico (dataRegistro→data) e tendência ordenados, normalizados', async () => {
+    const d1 = new Date('2025-02-01')
+    const d2 = new Date('2025-03-01')
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue({ objetivo: { plano: { clienteId: 'cliente-1' } } })
+    mockPrisma.historicoValores.findMany.mockResolvedValue([{ dataRegistro: d1, valor: 30 }])
+    mockPrisma.linhaTendencia.findMany.mockResolvedValue([{ data: d2, valor: 50 }])
+
+    const result = await getKRHistorico(validCuid)
+
+    expect(mockPrisma.historicoValores.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { resultadoChaveId: validCuid }, orderBy: { dataRegistro: 'asc' } })
+    )
+    expect(mockPrisma.linhaTendencia.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { resultadoChaveId: validCuid }, orderBy: { data: 'asc' } })
+    )
+    expect(result.historico).toEqual([{ data: d1, valor: 30 }])
+    expect(result.tendencia).toEqual([{ data: d2, valor: 50 }])
+  })
+
+  it('retorna listas vazias quando não há dados', async () => {
+    mockPrisma.resultadoChave.findUniqueOrThrow.mockResolvedValue({ objetivo: { plano: { clienteId: 'cliente-1' } } })
+    mockPrisma.historicoValores.findMany.mockResolvedValue([])
+    mockPrisma.linhaTendencia.findMany.mockResolvedValue([])
+
+    const result = await getKRHistorico(validCuid)
+
+    expect(result).toEqual({ historico: [], tendencia: [] })
   })
 })

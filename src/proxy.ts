@@ -23,20 +23,21 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
+  // getUser() revalida o JWT no Auth server (não confia só no cookie, ao contrário de getSession)
+  const { data: { user } } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
 
-  // Protected app routes — redirect to /login if no session
+  // Protected app routes — redirect to /login if not authenticated
   if (pathname.startsWith('/planos') || pathname.startsWith('/criador') || pathname.startsWith('/usuarios')) {
-    if (!session) {
+    if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
   }
 
   // Auth routes — redirect to /planos if already logged in
   if (pathname.startsWith('/login') || pathname.startsWith('/cadastro') || pathname.startsWith('/reset-senha')) {
-    if (session) {
+    if (user) {
       return NextResponse.redirect(new URL('/planos', request.url))
     }
   }

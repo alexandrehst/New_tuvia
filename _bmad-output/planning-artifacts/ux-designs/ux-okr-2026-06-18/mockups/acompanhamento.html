@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OKR SaaS — Acompanhamento (mock)</title>
+<style>
+  :root{
+    --bg:#F0F4F9; --fg:#0F172A; --card:#FFFFFF; --muted:#F1F5F9; --muted-fg:#64748B;
+    --border:#E2E8F0; --primary:#4C8CEC; --primary-hover:#3B79DB; --primary-fg:#FFFFFF;
+    --tint:#B2CDF8;
+    --np-fg:#15803D; --np-bg:#DCFCE7;   /* no_prazo */
+    --ea-fg:#B45309; --ea-bg:#FEF3C7;   /* em_atraso */
+    --er-fg:#C2410C; --er-bg:#FFEDD5;   /* em_risco */
+    --ra-fg:#DC2626; --ra-bg:#FEE2E2;   /* risco_alto */
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-full:9999px;
+    --shadow:0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+    font-family:'Geist Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--fg);display:flex;min-height:100vh;font-size:14px}
+  .metric{font-weight:700;letter-spacing:-.02em}
+  /* Sidebar */
+  aside{width:260px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px;gap:8px;flex-shrink:0}
+  .ws{display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--r-md);border:1px solid var(--border)}
+  .ws .logo{width:32px;height:32px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--primary),var(--tint))}
+  .ws b{font-size:14px}.ws span{display:block;font-size:11px;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em}
+  nav{margin-top:8px;display:flex;flex-direction:column;gap:4px}
+  nav .lbl{font-size:11px;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px 4px}
+  nav a{display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--r-md);color:var(--muted-fg);text-decoration:none;font-weight:500}
+  nav a.active{background:var(--primary);color:var(--primary-fg)}
+  nav a .ico{width:18px;height:18px;border-radius:5px;border:2px solid currentColor;opacity:.85}
+  .spacer{flex:1}
+  .dark{display:flex;align-items:center;gap:10px;padding:10px;color:var(--muted-fg);border-top:1px solid var(--border)}
+  .toggle{width:34px;height:20px;border-radius:var(--r-full);background:var(--muted);position:relative}
+  .toggle::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:var(--shadow)}
+  /* Main */
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between}
+  .crumb{font-size:12px;color:var(--muted-fg);margin-bottom:2px}
+  .crumb b{color:var(--fg)}
+  .topbar h1{font-size:18px;font-weight:700}
+  .actions{display:flex;gap:10px;align-items:center}
+  .btn{padding:8px 14px;border-radius:var(--r-md);border:1px solid var(--border);background:var(--card);font-weight:600;font-size:13px;color:var(--fg);cursor:pointer}
+  .btn.primary{background:var(--primary);color:var(--primary-fg);border-color:var(--primary)}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--tint)}
+  .content{padding:24px 28px;overflow:auto}
+  /* Summary band */
+  .summary{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+  .stat{background:var(--card);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:20px 22px;display:flex;align-items:center;gap:18px;flex:1;min-width:240px}
+  .stat .t{font-size:13px;color:var(--muted-fg)}
+  .stat .v{font-size:13px}
+  .stat h3{font-size:14px;margin-bottom:4px}
+  .gauge{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;flex-shrink:0}
+  .gauge span{font-size:15px}
+  .counters{background:var(--card);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:20px 22px;display:flex;gap:26px;align-items:center}
+  .counters .c b{font-size:28px;letter-spacing:-.02em}
+  .counters .c small{display:block;color:var(--muted-fg);font-size:12px}
+  /* Columns */
+  .cols{display:flex;gap:16px;align-items:flex-start}
+  .col{flex:1;min-width:300px;max-width:380px}
+  .obj-h{margin-bottom:12px}
+  .obj-h .k{font-size:11px;color:var(--primary);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .obj-h h2{font-size:16px;line-height:1.3;margin-top:2px}
+  .obj-h .pp{font-size:12px;color:var(--muted-fg);margin-top:6px}
+  .kr{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .kr .row1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .kr .upd{font-size:11px;color:var(--muted-fg)}
+  .pill{padding:3px 10px;border-radius:var(--r-full);font-size:11px;font-weight:700;white-space:nowrap}
+  .pill.np{background:var(--np-bg);color:var(--np-fg)}
+  .pill.ea{background:var(--ea-bg);color:var(--ea-fg)}
+  .pill.er{background:var(--er-bg);color:var(--er-fg)}
+  .pill.ra{background:var(--ra-bg);color:var(--ra-fg)}
+  .kr p{margin:8px 0 10px;font-size:13px}
+  .bar{height:8px;border-radius:var(--r-full);background:var(--muted);overflow:hidden}
+  .bar > i{display:block;height:100%;border-radius:var(--r-full);background:var(--primary)}
+  .bar.done > i{background:var(--np-fg)}
+  .kr .row3{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+  .kr .pct{font-size:18px;letter-spacing:-.02em}
+  .kr .val{font-size:12px;color:var(--muted-fg)}
+  .av{width:24px;height:24px;border-radius:50%;background:var(--tint)}
+  .add{border:2px dashed var(--border);border-radius:var(--r-lg);padding:40px 16px;text-align:center;color:var(--primary);font-weight:600;background:transparent}
+  .add .plus{width:44px;height:44px;border-radius:var(--r-md);background:var(--primary);color:#fff;display:grid;place-items:center;font-size:24px;margin:0 auto 10px}
+</style>
+</head>
+<body>
+  <aside>
+    <div class="ws"><div class="logo"></div><div><span>Workspace</span><b>Acme Inc.</b></div></div>
+    <nav>
+      <div class="lbl">Navegação</div>
+      <a class="active" href="#"><i class="ico"></i> Planos</a>
+      <a href="#"><i class="ico"></i> Usuários</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="dark"><div class="toggle"></div> Modo escuro</div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div>
+        <div class="crumb">Corporativo › <b>Marketing</b></div>
+        <h1>Objetivos e Resultados-Chave</h1>
+      </div>
+      <div class="actions">
+        <button class="btn">Editar plano</button>
+        <button class="btn primary">+ Objetivo</button>
+        <div class="avatar"></div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="summary">
+        <div class="stat">
+          <div class="gauge" style="background:conic-gradient(var(--primary) 58%, var(--muted) 0)"><span class="metric" style="background:var(--card);width:48px;height:48px;border-radius:50%;display:grid;place-items:center">58%</span></div>
+          <div><h3>Progresso geral</h3><div class="t">Média ponderada dos resultados-chave.</div></div>
+        </div>
+        <div class="stat">
+          <div class="gauge" style="background:conic-gradient(var(--tint) 45%, var(--muted) 0)"><span class="metric" style="background:var(--card);width:48px;height:48px;border-radius:50%;display:grid;place-items:center">45%</span></div>
+          <div><h3>Tempo decorrido</h3><div class="t">01/04 – 30/06 · 41 dias restantes</div></div>
+        </div>
+        <div class="counters">
+          <div class="c"><b class="metric">8</b><small>Total de KRs</small></div>
+          <div class="c"><b class="metric">6</b><small>Abertos</small></div>
+          <div class="c"><b class="metric">2</b><small>Concluídos</small></div>
+        </div>
+      </div>
+
+      <div class="cols">
+        <!-- Objetivo 1 -->
+        <div class="col">
+          <div class="obj-h"><div class="k">Objetivo 1</div><h2>Tornar a marca referência em conteúdo no setor</h2><div class="pp">Progresso ponderado · 71%</div></div>
+
+          <div class="kr">
+            <div class="row1"><span class="upd">Atualizado há 1h</span><span class="pill np">No prazo</span></div>
+            <p>Publicar 20 artigos de blog otimizados</p>
+            <div class="bar"><i style="width:70%"></i></div>
+            <div class="row3"><span class="pct metric">70%</span><span class="val">14 / 20</span><div class="av"></div></div>
+          </div>
+
+          <div class="kr">
+            <div class="row1"><span class="upd">Atualizado há 9 dias</span><span class="pill ea">Em atraso</span></div>
+            <p>Alcançar 50 mil visitas orgânicas/mês</p>
+            <div class="bar"><i style="width:46%"></i></div>
+            <div class="row3"><span class="pct metric">46%</span><span class="val">23k / 50k</span><div class="av"></div></div>
+          </div>
+
+          <div class="kr">
+            <div class="row1"><span class="upd">Concluído</span><span class="pill np">No prazo</span></div>
+            <p>Lançar a newsletter quinzenal</p>
+            <div class="bar done"><i style="width:100%"></i></div>
+            <div class="row3"><span class="pct metric">100%</span><span class="val">✓ concluído</span><div class="av"></div></div>
+          </div>
+        </div>
+
+        <!-- Objetivo 2 -->
+        <div class="col">
+          <div class="obj-h"><div class="k">Objetivo 2</div><h2>Escalar a geração de leads qualificados</h2><div class="pp">Progresso ponderado · 33%</div></div>
+
+          <div class="kr">
+            <div class="row1"><span class="upd">Atualizado há 5 dias</span><span class="pill ra">Risco alto</span></div>
+            <p>Gerar 1.200 MQLs no trimestre</p>
+            <div class="bar"><i style="width:18%"></i></div>
+            <div class="row3"><span class="pct metric">18%</span><span class="val">216 / 1.200</span><div class="av"></div></div>
+          </div>
+
+          <div class="kr">
+            <div class="row1"><span class="upd">Atualizado há 2 dias</span><span class="pill er">Em risco</span></div>
+            <p>Reduzir custo por lead para R$ 40</p>
+            <div class="bar"><i style="width:40%"></i></div>
+            <div class="row3"><span class="pct metric">40%</span><span class="val">R$ 62 → R$ 40</span><div class="av"></div></div>
+          </div>
+        </div>
+
+        <!-- Add -->
+        <div class="col">
+          <div class="add"><div class="plus">+</div>Adicionar novo Objetivo</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -229,11 +229,87 @@ Todas as mutações via **Server Actions**. API Routes apenas para webhooks e in
 |---|---|---|
 | Mutações | Server Actions | Reduz boilerplate de API, tipagem end-to-end com Zod |
 | IA streaming | Route Handlers com `ReadableStream` | UX responsiva; evita timeout em respostas longas |
-| Multi-tenancy | Row-Level Security no Supabase | Isolamento por `clienteId` garantido no banco |
+| Multi-tenancy | Guard de aplicação (primário) + RLS por `clienteId` (rede secundária) | Isolamento por `clienteId`. Ver "Isolamento multi-tenant" abaixo — a RLS hoje **não** cobre o caminho Prisma (role `postgres` BYPASSRLS); a defesa primária é o código. |
 | Auth | Supabase Auth | Integra nativamente com RLS; suporta convite por email |
 | ORM | Prisma | Type-safety, migrations versionadas, seed fácil |
 | Testes unitários | Vitest | Performance, compatível com ESM, mock nativo |
 | Testes E2E | Playwright | Suporte a múltiplos browsers, CI-friendly |
+
+### 7.1 Isolamento multi-tenant: aplicação (primária) + RLS (secundária)
+
+> Decisão D4 do Epic 6 (Story 6.6) — Opção C. Ver
+> `_bmad-output/planning-artifacts/architecture-epic6-seguranca.md`.
+
+**Defesa PRIMÁRIA — guard de aplicação.** Todo acesso a dados de domínio é via
+**Prisma**, que conecta por connection string (`DATABASE_URL`/`DIRECT_URL`) com o
+role **`postgres`** — superuser do Supabase, que tem **`BYPASSRLS`**. O
+`supabase-js` é usado **apenas para Auth** (`auth.getUser()`), não para ler/gravar
+domínio. Portanto, o isolamento real entre tenants é garantido **no código**:
+
+- `assertMesmoTenant` / `requireUser` / `requireAdmin` em `src/features/auth/guards.ts`;
+- filtro `clienteId` no `where` de toda query/mutação (ex.: o IDOR corrigido em
+  `src/features/plano/queries.ts`).
+
+Esquecer um único filtro vaza dados de outro tenant — por isso o guard é
+disciplina obrigatória, não opcional.
+
+**Rede SECUNDÁRIA — RLS no Postgres.** A DDL versionada em
+`prisma/sql/rls_tenant_isolation.sql` habilita `ROW LEVEL SECURITY` e cria
+policies por `clienteId` em todas as tabelas de domínio (tabelas-filhas como
+`HistoricoValores`/`LinhaTendencia` derivam o tenant por saltos de FK até
+`Plano.clienteId`, via `EXISTS`). As policies leem o tenant de
+`current_setting('app.current_tenant', true)` e o role `anon` tem o acesso
+revogado (nega por padrão).
+
+Hoje essa RLS **não** protege o caminho do Prisma (role `postgres` bypassa). Ela
+só passa a atuar quando o banco for acessado por uma conexão **sujeita a RLS**:
+via supabase-js (role `authenticated`), ou via Prisma sob um role
+não-privilegiado que injeta `SET LOCAL app.current_tenant = '<clienteId>'` por
+transação — a **Opção B**, registrada como endurecimento futuro (story dedicada),
+**fora do escopo** da 6.6.
+
+**Aplicação e roles.** A RLS é aplicada explicitamente (não por `db:push`); ver
+`prisma/sql/README.md`. Conexões de DDL/migrate/seed (`DIRECT_URL`, role
+`postgres`) continuam bypassando RLS de propósito, para não travar deploys/seed.
+
+---
+
+### 7.2 Contrato de auth & sessão
+
+> Decisão CB-1 do Epic 6 (Story 6.1). Ver PRD §13 e
+> `_bmad-output/planning-artifacts/architecture-epic6-seguranca.md`.
+
+Matriz de acesso por **estado de autenticação** — o que cada estado pode acessar:
+
+| Estado | Rotas públicas (`/login`, `/cadastro`, `/reset-senha`) + `(recovery)` | `(app)/*` (área logada) |
+|---|---|---|
+| **Anônimo** (sem sessão) | acessa normalmente | redireciona → `/login` |
+| **Autenticado-não-verificado** | *não existe como sessão* (ver nota) | não alcança — não há sessão |
+| **Autenticado** (verificado) | redireciona → `/planos` | acessa |
+
+**Onde cada regra é imposta:**
+- Rotas públicas: `src/app/(auth)/layout.tsx` — `async`, `getUser()` → `redirect('/planos')` se houver usuário.
+- Área logada: `src/app/(app)/layout.tsx` — `getUser()` → `redirect('/login')` se não houver sessão.
+- `getUser()` (não `getSession`) é o padrão — revalida o JWT no Auth server, não confia só no cookie.
+
+**Nota — por que o estado "não-verificado" é seguro por construção.** Com
+**"Confirm email" ligado** no Supabase, o `signUp` **não recebe sessão** até o
+e-mail ser confirmado: `src/features/auth/actions.ts` ramifica em `data.session`
+e, quando ausente, retorna `{ success: true }` (a tela `/cadastro` mostra
+"verifique seu email") **sem autenticar**. Logo o usuário não-verificado é
+efetivamente anônimo até confirmar — não existe sessão "logada porém não
+verificada" para vazar para `(app)/*`.
+
+**Política de verificação (config obrigatória).** "Confirm email" em
+Authentication → Sign In / Providers → Email **deve estar ligado**; sem isso o
+`signUp` recebe sessão e loga direto, quebrando a matriz acima. A URL
+`…/auth/confirm` deve estar na allowlist de Redirect URLs (pré-requisito do fluxo
+de recovery — Story 6.2).
+
+**Recovery.** A sessão de recovery (link de redefinição de senha) é uma sessão
+real; por isso `/nova-senha` vive no grupo `(recovery)` (sem o guard de `(auth)`).
+Não deve ser usada para navegar no app — ver follow-up de honestidade em
+`_bmad-output/implementation-artifacts/review-epic6.md`.
 
 ---
 

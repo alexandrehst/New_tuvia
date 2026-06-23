@@ -1,7 +1,14 @@
-'use client'
+"use client"
 
-import { useState, useTransition } from 'react'
-import { updateKeyResultValor } from '@/features/key-result/actions'
+import { useState, useTransition } from "react"
+
+import { updateKeyResultValor } from "@/features/key-result/actions"
+import type { StatusRisco } from "@/features/key-result/lib/calculos"
+import { StatusPill } from "@/components/status-pill"
+import { KRProgress } from "@/components/kr-progress"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
 
 type KRData = {
   id: string
@@ -19,144 +26,94 @@ interface KRPanelProps {
 }
 
 export function KRPanel({ kr, onClose, onUpdate }: KRPanelProps) {
-  const [valor, setValor] = useState('')
-  const [comentario, setComentario] = useState('')
-  const [error, setError] = useState('')
-  const [showToast, setShowToast] = useState(false)
+  const [valor, setValor] = useState("")
+  const [comentario, setComentario] = useState("")
+  const [error, setError] = useState("")
   const [currentKR, setCurrentKR] = useState(kr)
   const [isPending, startTransition] = useTransition()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const num = parseFloat(valor)
-    if (isNaN(num)) { setError('Valor inválido'); return }
-    setError('')
+    if (Number.isNaN(num)) {
+      setError("Valor inválido")
+      return
+    }
+    setError("")
 
     startTransition(async () => {
       try {
-        const result = await updateKeyResultValor({ krId: kr.id, valor: num, comentario: comentario || undefined })
+        const result = await updateKeyResultValor({
+          krId: kr.id,
+          valor: num,
+          comentario: comentario || undefined,
+        })
         if (result.ok) {
           const updated = { ...currentKR, valorAtual: num, progresso: result.progresso, status: result.status }
           setCurrentKR(updated)
-          onUpdate(updated)
-          setValor('')
-          setComentario('')
-          setShowToast(true)
-          setTimeout(() => setShowToast(false), 3000)
+          onUpdate(updated) // reflexo otimista no card + aria-live (ObjetivosBoard)
+          setValor("")
+          setComentario("")
+          onClose() // fecha o Sheet em caso de sucesso
+        } else {
+          setError("Erro ao salvar. Tente novamente.")
         }
       } catch {
-        setError('Erro ao salvar. Tente novamente.')
+        // valor preservado no estado para nova tentativa
+        setError("Erro ao salvar. Tente novamente.")
       }
     })
   }
 
+  const pct = Math.round(Math.min(100, Math.max(0, currentKR.progresso)))
+
   return (
-    <div data-testid="kr-panel" className="p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-muted)' }}>Atualizar resultado chave</p>
-          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{currentKR.descricao}</p>
-        </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-gray-200 transition-colors" style={{ color: 'var(--text-muted)' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
-        </button>
+    <div data-testid="kr-panel" className="flex flex-col gap-4">
+      {/* Estado atual */}
+      <div className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-3">
+        <span className="text-lg font-bold tabular-nums text-foreground">{pct}%</span>
+        <KRProgress value={currentKR.progresso} className="flex-1" />
+        <StatusPill status={currentKR.status as StatusRisco} />
       </div>
-
-      {/* Current stats */}
-      <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{ background: '#f9fafb', border: '1px solid var(--border)' }}>
-        <div className="text-center">
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Progresso</p>
-          <p data-testid="kr-progresso" className="text-base font-bold" style={{ color: 'var(--teal)' }}>
-            {Math.round(currentKR.progresso)}%
-          </p>
-        </div>
-        <div className="flex-1">
-          <div className="progress-bar">
-            <div className="progress-bar-fill" style={{ width: `${Math.min(currentKR.progresso, 100)}%` }} />
-          </div>
-        </div>
-        <span
-          data-testid="status-risco"
-          className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
-          style={statusStyle(currentKR.status)}
-        >
-          {statusLabel(currentKR.status)}
-        </span>
-      </div>
-
-      {showToast && (
-        <div data-testid="toast-sucesso" className="mb-3 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2"
-          style={{ background: '#d1fae5', color: '#065f46' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          Valor atualizado com sucesso!
-        </div>
-      )}
 
       {error && (
-        <div className="mb-3 rounded-lg px-4 py-2.5 text-sm" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+        <div role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-3">
-        <div className="flex-1">
-          <label htmlFor={`valor-${kr.id}`} className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-            Novo valor{currentKR.unidade ? ` (${currentKR.unidade})` : ''}
-          </label>
-          <input
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor={`valor-${kr.id}`}>
+            Novo valor{currentKR.unidade ? ` (${currentKR.unidade})` : ""}
+          </Label>
+          <Input
             id={`valor-${kr.id}`}
             type="number"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
             placeholder={String(currentKR.valorAtual)}
-            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
-            style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
           />
         </div>
-        <div className="flex-1">
-          <label htmlFor={`comentario-${kr.id}`} className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-            Comentário
-          </label>
-          <input
+        <div className="grid gap-1.5">
+          <Label htmlFor={`comentario-${kr.id}`}>Comentário</Label>
+          <Input
             id={`comentario-${kr.id}`}
             type="text"
             value={comentario}
             onChange={(e) => setComentario(e.target.value)}
-            placeholder="Adicione um comentário..."
-            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
-            style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+            placeholder="Opcional…"
           />
         </div>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 shrink-0"
-          style={{ background: 'var(--teal)' }}
-        >
-          {isPending ? 'Salvando...' : 'Salvar'}
-        </button>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={isPending}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Salvando…" : "Salvar"}
+          </Button>
+        </div>
       </form>
     </div>
   )
-}
-
-function statusLabel(status: string) {
-  const labels: Record<string, string> = {
-    no_prazo: 'No prazo', em_atraso: 'Em atraso', em_risco: 'Em risco', risco_alto: 'Risco alto',
-  }
-  return labels[status] ?? status
-}
-
-function statusStyle(status: string): React.CSSProperties {
-  const styles: Record<string, React.CSSProperties> = {
-    no_prazo: { background: '#d1fae5', color: '#065f46' },
-    em_atraso: { background: '#fef3c7', color: '#92400e' },
-    em_risco: { background: '#ffedd5', color: '#9a3412' },
-    risco_alto: { background: '#fee2e2', color: '#991b1b' },
-  }
-  return styles[status] ?? { background: '#f3f4f6', color: '#6b7280' }
 }

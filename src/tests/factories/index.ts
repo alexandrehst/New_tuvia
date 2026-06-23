@@ -1,4 +1,4 @@
-import type { ResultadoChave, Objetivo, Plano, User, Cliente } from '@prisma/client'
+import type { ResultadoChave, Objetivo, Plano, User, Cliente, PlanoUsuario } from '@prisma/client'
 
 export function makeCliente(overrides: Partial<Cliente> = {}): Cliente {
   return {
@@ -48,6 +48,17 @@ export function makePlano(overrides: Partial<Plano> = {}): Plano {
     frequenciaAtualizacao: 'mensal',
     createdAt: new Date('2025-01-01'),
     updatedAt: new Date('2025-01-01'),
+    ...overrides,
+  }
+}
+
+export function makePlanoUsuario(overrides: Partial<PlanoUsuario> = {}): PlanoUsuario {
+  return {
+    id: 'plano-usuario-1',
+    planoId: 'plano-1',
+    userId: 'user-1',
+    papel: 'viewer',
+    createdAt: new Date('2025-01-01'),
     ...overrides,
   }
 }

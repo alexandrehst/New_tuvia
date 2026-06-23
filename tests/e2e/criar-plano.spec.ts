@@ -1,40 +1,40 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('Criação de Plano', () => {
+test.describe('Criação de Plano (wizard)', () => {
   test.beforeEach(async ({ page }) => {
-    // Assume que o storageState de auth foi salvo pelo global.setup
     await page.goto('/criador')
   })
 
-  test('step 1: campos obrigatórios mostram erros inline', async ({ page }) => {
-    await page.getByRole('button', { name: /próximo/i }).click()
+  test('mostra "Passo 1 de N" e desabilita Próximo até empresa e ramo', async ({ page }) => {
+    await expect(page.getByText(/passo 1 de/i)).toBeVisible()
 
-    await expect(page.getByText(/empresa/i)).toBeVisible()
-    await expect(page.getByText(/ramo/i)).toBeVisible()
+    const proximo = page.getByRole('button', { name: /próximo/i })
+    await expect(proximo).toBeDisabled()
+
+    await page.getByLabel('Nome da empresa').fill('TechCorp')
+    await page.getByLabel('Ramo de atuação').fill('Tecnologia')
+
+    await expect(proximo).toBeEnabled()
   })
 
-  test('step 1: sugestões de missão carregam após preencher empresa', async ({ page }) => {
-    await page.getByLabel('Empresa').fill('TechCorp')
+  test('avança para o passo 2 (Visão)', async ({ page }) => {
+    await page.getByLabel('Nome da empresa').fill('TechCorp')
     await page.getByLabel('Ramo de atuação').fill('Tecnologia')
-    await page.getByLabel('Descrição do negócio').fill('Empresa de software B2B para gestão de times')
+    await page.getByRole('button', { name: /próximo/i }).click()
 
-    // Aguarda as sugestões de missão aparecerem (streaming)
-    await expect(page.getByTestId('sugestoes-missao')).toBeVisible({ timeout: 30_000 })
-    const sugestoes = page.getByTestId('sugestao-missao-item')
-    await expect(sugestoes).toHaveCount(5, { timeout: 30_000 })
+    await expect(page.getByText(/passo 2 de/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Visão' })).toBeVisible()
   })
 
-  test('navegar entre steps preserva dados', async ({ page }) => {
-    await page.getByLabel('Empresa').fill('TechCorp')
+  test('navegar entre passos preserva os dados', async ({ page }) => {
+    await page.getByLabel('Nome da empresa').fill('TechCorp')
     await page.getByLabel('Ramo de atuação').fill('Tecnologia')
-    await page.getByLabel('Descrição do negócio').fill('Empresa de software B2B para gestão')
-    // Seleciona primeira sugestão de missão
-    await page.getByTestId('sugestao-missao-item').first().click({ timeout: 30_000 })
-
     await page.getByRole('button', { name: /próximo/i }).click()
-    await expect(page.getByTestId('step-2')).toBeVisible()
-
     await page.getByRole('button', { name: /voltar/i }).click()
-    await expect(page.getByLabel('Empresa')).toHaveValue('TechCorp')
+
+    await expect(page.getByLabel('Nome da empresa')).toHaveValue('TechCorp')
   })
+
+  // Requer OpenAI/streaming (rota /api/ai/*) → validar em ambiente com chave configurada.
+  test.fixme('sugestões de IA preenchem o campo (visão/missão)', async () => {})
 })
